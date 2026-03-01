@@ -1,6 +1,11 @@
+![Banner](images/banner_wide.png)
+
 # Sneak! - Sneak is good now.
 
 An OpenMW mod that makes sneak mechanics playable. Sneak detection is now a visually displayed gradual progress. It loosely follows original sneak detection formulas in a sense that whichever creature was difficult to sneak by in the original will also be difficult to sneak by now. There are many small tweaks to how those formulas work and how they translate into a gradual detection progress, aimed at providing a more fun gameplay experience. This mod attempts to strike a balance between gamified mechanics and """realism""".
+
+Click on a preview below to watch a release trailer.
+[![Release Trailer](https://img.youtube.com/vi/e-O7qEIHpNw/0.jpg)](https://www.youtube.com/watch?v=e-O7qEIHpNw)
 
 Features:
 
