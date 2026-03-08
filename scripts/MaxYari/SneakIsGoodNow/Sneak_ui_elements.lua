@@ -4,8 +4,9 @@ local ui = require("openmw.ui")
 local util = require("openmw.util")
 local camera = require("openmw.camera")
 
-local gutils = require(mp .. 'scripts/gutils')
-local Tweener = require(mp .. 'scripts/tweener')
+local gutils = require(mp .. 'utils/gutils')
+local Tweener = require(mp .. 'utils/tweener')
+local s = require(mp .. "settings")
 
 -- DetectionMarker class
 local DetectionMarker = {}
@@ -157,7 +158,8 @@ function DetectionMarker:setWorldPos(worldPos)
 
     if isVisible then
         -- On-screen: use projection directly
-        self.element.layout.props.position = screenPos
+        local relScreenPos = util.vector2(screenPos.x/screenSize.x, screenPos.y/screenSize.y)        
+        self.element.layout.props.relativePosition = relScreenPos
         self.element:update()
         return
     end
@@ -195,7 +197,8 @@ function DetectionMarker:setWorldPos(worldPos)
     )
 
     -- Apply position
-    self.element.layout.props.position = edgePos
+    local relScreenPos = util.vector2(edgePos.x/screenSize.x, edgePos.y/screenSize.y) 
+    self.element.layout.props.relativePosition = relScreenPos
     self.element:update()
 end
 
@@ -222,7 +225,7 @@ function DetectionMarker:appear()
         0.3, -- Duration in seconds
         Tweener.easings.easeOutQuad, -- Easing function
         function(value)
-            self.element.layout.props.alpha = value
+            self.element.layout.props.alpha = value * s.settings["MarkersAlpha"]
             self.element:update()
         end
     )
@@ -251,12 +254,18 @@ function DetectionMarker:disappear(wasSuccessful, autoDestroy)
         return -- Animation already running, don't start another
     end
 
+    -- Stop and remove the appear animation if it's still running
+    if self.tweeners["appear"] and self.tweeners["appear"].playing then
+        self.tweeners["appear"] = nil
+    end
+
     -- Create a new tweener instance for this animation
     local tweener = Tweener:new()
 
     -- Store initial values for the animation
+    -- Use fixed alpha = 1 to ensure marker is visible during disappear animation
     local initialSize = self.element.layout.props.size
-    local initialAlpha = self.element.layout.props.alpha    
+    local initialAlpha = s.settings["MarkersAlpha"]    
 
     -- Add the size animation from current size to disappear size with cleanup callback
     tweener:add(

@@ -12,9 +12,9 @@ local util = require("openmw.util")
 local ui = require('openmw.ui')
 local aux_util = require('openmw_aux.util')
 
-local DEFS = require(mp .. 'scripts/sneak_defs')
-local gutils = require(mp .. 'scripts/gutils')
-local itemutil = require(mp .. "scripts/item_utils")
+local DEFS = require(mp .. 'utils/sneak_defs')
+local gutils = require(mp .. 'utils/gutils')
+local itemutil = require(mp .. "utils/item_utils")
 local detection = require(mp .. "detection_math")
 local aggression = require(mp .. "aggression_math")
 local DetectionMarker = require(mp .. "Sneak_ui_elements")
@@ -140,86 +140,78 @@ local function detectionLogicTick(dt)
     if ps.isSneaking then
         for _, actor in ipairs(nearby.actors) do
 
-            if actor == omwself.object then goto continue end   
-            
-            local ast = nil   
+            if actor == omwself.object then goto continue end
+
             local isDead = types.Actor.isDead(actor)
-            
+
+            -- Don't add dead actors to observers, but mark them dead if ast exists
+            local ast = nil
             if isDead then
                 ast = getAstIfExists(actor)
-                if ast then
-                    ast.noticing = false
-                    ast.progress = 0
-                    ast.successRolls = 0
-                    ast.isDead = isDead
-                end
+                if ast then ast.isDead = true end
                 goto continue
             end
-            
-            ast = getAst(actor)
-            ast.isDead = isDead
+
+            if not ast then ast = getAst(actor) end
             
             local distance = (omwself.position - actor.position):length()
             ast.distance = distance
-            local noticing = false
-            local sneakChance = 100
-            local isAggro = false
+            ast.isDead = false
 
-            -- print(ast.actor.recordId, " Aggro range is ", aggroDistance(ast), " while currect detection range is ", detectionRange)
-            
-            -- Detection check! ------------
-            --------------------------------
+            -- Add to observerActorStatuses if within detection range and not a friend
             if distance <= detection.detectionRange and not ast.isFriend then
-                if ast.sneakChecker == nil then                        
-                    ast.sneakChecker = gutils.cachedFunction(detection.sneakCheck, sneakCheckPeriod, math.random() * sneakCheckPeriod)
-                end
-                if ast.followTargetsChecker == nil then                    
-                    ast.followTargetsChecker = gutils.cachedFunction(getFollowTargets, followTargetsCheckPeriod, math.random() * followTargetsCheckPeriod)
-                end
-
-                local newSneakChance = nil
-                isNotDetected, newSneakChance = ast.sneakChecker(ast, ps, extraMods)
-                
-                noticing = not isNotDetected
-                if newSneakChance ~= nil then sneakChance = newSneakChance end
-
-                ast.followTargetsChecker(actor)    
-                
-                -- Check if agressive
-                isAggro = aggression.isAggressive(ast, omwself.object)
-                -- print(actor.recordId .. " is " .. (isAggro and "aggressive" or "not aggressive") .. " towards player")
-            end
-            
-            ast.noticing = noticing
-            ast.sneakChance = sneakChance
-            ast.isAggressive = isAggro
-
-            -- Add to observerActorStatuses if noticing OR if there's existing progress that needs to be tracked
-            if ast.noticing or ast.progress > 0 then
                 observerActorStatuses[actor.id] = ast
-            end               
-            
+            end
+
             ::continue::
         end
-    end    
+    end
     
     ps.detectedByNonAggro = false
     for actorId, ast in pairs(observerActorStatuses) do
+        -- LOS check for all observer actors (regardless of detection range)
+        if ast.losChecker == nil then
+            ast.losChecker = gutils.cachedFunction(detection.LOS, losCheckPeriod, math.random() * losCheckPeriod)
+        end
+
+        -- Sneak check for all observers (reuses inLOS from above)
+        if ast.sneakChecker == nil then
+            ast.sneakChecker = gutils.cachedFunction(detection.sneakCheck, sneakCheckPeriod, math.random() * sneakCheckPeriod)
+        end
+        if ast.followTargetsChecker == nil then
+            ast.followTargetsChecker = gutils.cachedFunction(getFollowTargets, followTargetsCheckPeriod, math.random() * followTargetsCheckPeriod)
+        end
+
+        ast.inLOS = ast.losChecker(omwself.object, ast.actor)
+        local isNotDetected, newSneakChance = ast.sneakChecker(ast, ps, extraMods)
+        ast.followTargetsChecker(ast.actor)
+
+        ast.noticing = not isNotDetected
+        if newSneakChance ~= nil then ast.sneakChance = newSneakChance end
+        
+        if ast.fightingPlayer then
+            ast.isAggressive = true
+        else
+            ast.isAggressive = aggression.isAggressive(ast, omwself.object)
+        end        
+
         -- Manage detection progress ----
         ---------------------------------
         local detectionVel = getDetectionVelocity(ast.sneakChance)
 
         if ast.progress == nil then ast.progress = 0.0 end
         if ast.successRolls == nil then ast.successRolls = 0 end
-        
+
+        -- Handle dead/invalid actors
         if ast.isDead or not ast.actor:isValid() then
+            ast.noticing = false
             ast.progress = 0.0
             ast.successRolls = 0
         elseif ast.fightingPlayer then
             ast.noticing = true
             ast.progress = 1.0
         elseif not ast.inLOS then
-            -- Out of LOS: immediate fixed decrease, set successRolls to 5
+            -- Out of LOS: immediate fixed decrease, set successRolls to 3
             ast.progress = math.max(0.0, ast.progress - dt * detectionDecreaseRate)
             ast.successRolls = 3
         elseif ast.noticing then
@@ -238,8 +230,7 @@ local function detectionLogicTick(dt)
 
         -- Send spotted event and break sneak only when detection progress reaches 1.0
         if ast.progress >= 1.0 then
-            if ast.isAggressive then                
-                ps.isSneaking = false          
+            if ast.isAggressive then
                 omwself.controls.sneak = false  -- Break sneak when fully detected 
             else
                 ps.detectedByNonAggro = true
@@ -272,9 +263,11 @@ local function detectionLogicTick(dt)
 
         -- Final cleanup, if no marker and no progress - remove the status object --
         ----------------------------------------------------------------------------
-        if (ast.marker == nil) and (ast.progress == 0.0) then
+        if (ast.marker == nil) and (ast.progress <= 0.0) then
             observerActorStatuses[actorId] = nil
         end
+
+        ::continue::
     end
 end
 
@@ -363,10 +356,7 @@ local function onCombatTargetsChanged(e)
 end
 
 local function onGetFollowTargets(e)
-    -- gutils.print("Player: Received follow targets resp from " .. e.actor.recordId, 1)
-    for _, actor in ipairs(e.targets) do
-        gutils.print("Target:",actor.recordId)
-    end
+    -- gutils.print("Player: Received follow targets resp from " .. e.actor.recordId, 1)    
     if e.actor == omwself.object then return end
 
     local ast = getAst(e.actor)

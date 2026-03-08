@@ -28,8 +28,8 @@ local util = require("openmw.util")
 local ui = require('openmw.ui')
 local aux_util = require('openmw_aux.util')
 
-local DEFS = require(mp .. 'scripts/sneak_defs')
-local gutils = require(mp .. 'scripts/gutils')
+local DEFS = require(mp .. 'utils/sneak_defs')
+local gutils = require(mp .. 'utils/gutils')
 local selfActor = gutils.Actor:new(omwself)
 
 local module = {}
@@ -67,7 +67,7 @@ end
 local function LOS(player, actor)
     -- cast once from center of box to center of box
     local playerBounds = types.Actor.getPathfindingAgentBounds(player) -- Use pathfinding bounds as they should match collider size. If mesh bounding box is used instead - center is sometimes outside the collider.
-    local playerHeight = playerBounds.halfExtents.z * 2    
+    local playerHeight = playerBounds.halfExtents.z * 2
     local playerEyes = player.position + util.vector3(0,0,playerHeight * 0.75)
     local actorEyes = actor:getBoundingBox().center -- Some actors (like creatures) have wonky pathfinding bounds, so better use mesh bounding box here
 
@@ -84,6 +84,7 @@ local function LOS(player, actor)
 
     return false
 end
+module.LOS = LOS
 
 -- Main math -----------------------------------------
 ------------------------------------------------------
@@ -171,19 +172,19 @@ local function elusiveness(distance, ps, extraMods)
 end
 
 -- sneakCheck should return true if the actor can't see the player.
+-- Note: ast.inLOS must be set before calling this function
 local function sneakCheck(ast, ps, extraMods)
     -- if we aren't sneaking, then you don't pass the check.
-    if ps.isSneaking ~= true then return false, nil end    
+    if ps.isSneaking ~= true then return false, nil end
 
-    ast.inLOS = LOS(omwself.object, ast.actor)
-    if ast.inLOS == false then return true,nil end 
+    if ast.inLOS == false then return true,nil end
 
     local elusivenessScore = elusiveness(ast.distance, ps, extraMods)
     local awarenessScore = awareness(ast, ps, extraMods)
-    local sneakChance = math.min(100, math.max(0, elusivenessScore - awarenessScore))    
+    local sneakChance = math.min(100, math.max(0, elusivenessScore - awarenessScore))
     local success = math.random(0, 100) <= sneakChance
     -- gutils.print("elusivenessScore: " .. elusivenessScore .. ", awarenessScore: " .. awarenessScore .. ", sneakChance: " .. sneakChance .. ", success: " .. tostring(success))
-    
+
 
     -- gutils.print("sneak chance: " .. sneakChance .. ", roll: " .. roll)
     return success, sneakChance
