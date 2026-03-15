@@ -33,7 +33,7 @@ I.Settings.registerGroup {
 }
 
 return {
-    settings = SettingsHelper:new('SneakIsGoodNowSettings')
+    settings = SettingsHelper:new('SettingsSneakIsGoodNow')
 }
 
 

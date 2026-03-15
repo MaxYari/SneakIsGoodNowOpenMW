@@ -279,7 +279,7 @@ function DetectionMarker:disappear(wasSuccessful, autoDestroy)
                 self.element.layout.content["detectionFillWrapper"].content["detectionFill"].props.size = newSize
             end
 
-            -- Interpolate alpha from current alpha to 0 using gutils.lerp
+            -- Interpolate alpha from current alpha to 0 using gutils.lerp            
             local newAlpha = gutils.lerp(initialAlpha, 0, value)
             self.element.layout.props.alpha = newAlpha
 
