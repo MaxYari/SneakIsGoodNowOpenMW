@@ -38,7 +38,7 @@ local module = {}
 fSneakUseDist = core.getGMST("fSneakUseDist")
 detectionRange = fSneakUseDist -- to do, dont forget to change this
 nearDetectionRange = detectionRange*0.66
-gutils.print("Sneak detection range", detectionRange * DEFS.GUtoM, nearDetectionRange * DEFS.GUtoM, 0)
+gutils.print("Sneak detection range", detectionRange * DEFS.GUtoM, nearDetectionRange * DEFS.GUtoM, 1)
 
 module.detectionRange = detectionRange
 module.nearDetectionRange = nearDetectionRange

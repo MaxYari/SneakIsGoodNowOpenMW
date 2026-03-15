@@ -30,7 +30,7 @@ There are also few sneak-related mods out there such as [Burglary Overhaul](http
 
 NO MATTER WHICH INSTALLATION APPROACH YOU USE you need to **enable `SneakIsGoodNow.omwscripts` and `SneakIsGoodNow.omwaddon` files** inside the `ContentFiles` tab of OpenMW launcher. You are done, have fun!
 
-AND be sure to **enable `Toggle Sneak`** - this option makes it so that you don't have to hold sneak button to sneak, this mod will not work properly without it. Don't remember where that setting is and I'm too lazy to look it up, it's somewhere in the launcher or in game settings.
+AND be sure to **enable `Toggle Sneak`** in scripts->OpenMW Controls: this option makes it so that you don't have to hold sneak button to sneak, this mod will not work properly without it.
 
 Install as any other OpenMW mod, if you installed an OpenMW mod before - you know what to do, information below is for those who are new to OpenMW modding.
 

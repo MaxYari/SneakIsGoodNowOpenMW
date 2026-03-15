@@ -1,7 +1,7 @@
 
 
 local mp = "scripts/MaxYari/SneakIsGoodNow/"
-DebugLevel = 1
+DebugLevel = 0
 
 local I = require("openmw.interfaces")
 local types = require("openmw.types")

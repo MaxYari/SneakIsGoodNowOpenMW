@@ -13,7 +13,7 @@ I.Settings.registerPage {
     description = "The mod is active. Go sneak now.",
 }
 I.Settings.registerGroup {
-    key = 'SneakIsGoodNowSettings',
+    key = 'SettingsSneakIsGoodNow',
     page = 'SneakIsGoodNowPage',
     l10n = 'SneakIsGoodNow',
     name = 'Settings',    
