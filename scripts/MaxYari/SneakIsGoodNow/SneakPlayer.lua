@@ -9,8 +9,6 @@ local nearby = require("openmw.nearby")
 local core = require("openmw.core")
 local omwself = require("openmw.self")
 local util = require("openmw.util")
-local ui = require('openmw.ui')
-local aux_util = require('openmw_aux.util')
 
 local DEFS = require(mp .. 'utils/sneak_defs')
 local gutils = require(mp .. 'utils/gutils')
@@ -45,6 +43,12 @@ local extraMods = {
 local modifiedSkill = nil
 local skillMod = 0
 local lastCell = nil
+
+local nearbyCheckTimer = 0
+local nearbyCheckPeriod = 0.2
+
+local effectsCheckTimer = 0
+local effectsCheckPeriod = 0.2
 
 local observerActorStatuses = {}
 local persistantActorStatuses = {}
@@ -120,6 +124,14 @@ end
 
 
 
+local function isActorKnockedOut(actor)
+    for _, spell in pairs(types.Actor.activeSpells(actor)) do
+        if spell.id == DEFS.KNOCKOUT_SPELL_ID then return true end
+    end
+    return false
+end
+
+
 -- Main logic starts here -----------------------------------------------
 -------------------------------------------------------------------------
 local function detectionLogicTick(dt)
@@ -138,7 +150,11 @@ local function detectionLogicTick(dt)
         end
     end
 
-    if ps.isSneaking then
+    -- Throttled nearby scan: new observers picked up every ~0.2s instead of every frame;
+    -- existing observers in observerActorStatuses continue to be processed every frame below
+    nearbyCheckTimer = nearbyCheckTimer + dt
+    if ps.isSneaking and nearbyCheckTimer >= nearbyCheckPeriod then
+        nearbyCheckTimer = 0
         for _, actor in ipairs(nearby.actors) do
 
             if actor == omwself.object then goto continue end
@@ -154,7 +170,7 @@ local function detectionLogicTick(dt)
             end
 
             if not ast then ast = getAst(actor) end
-            
+
             local distance = (omwself.position - actor.position):length()
             ast.distance = distance
             ast.isDead = false
@@ -203,8 +219,13 @@ local function detectionLogicTick(dt)
         if ast.progress == nil then ast.progress = 0.0 end
         if ast.successRolls == nil then ast.successRolls = 0 end
 
+        -- Handle knocked out actors (Devilish Sleep Spell compatibility)
+        if ast.isKnockedOut then
+            ast.isKnockedOut = isActorKnockedOut(ast.actor)
+        end
+
         -- Handle dead/invalid actors
-        if ast.isDead or not ast.actor:isValid() then
+        if ast.isDead or ast.isKnockedOut or not ast.actor:isValid() then
             ast.noticing = false
             ast.progress = 0.0
             ast.successRolls = 0
@@ -241,7 +262,7 @@ local function detectionLogicTick(dt)
         -- Manage ui markers ------------------
         ---------------------------------------
         -- Show markers only when sneaking and detection progress is happening
-        local shouldShowMarker = ps.isSneaking and not ast.isDead and ast.inLOS        
+        local shouldShowMarker = ps.isSneaking and not ast.isDead and not ast.isKnockedOut and ast.inLOS
         if shouldShowMarker then
             -- If marker doesnt exist but should - make it
             if not ast.marker then ast.marker = DetectionMarker:new() end
@@ -261,6 +282,9 @@ local function detectionLogicTick(dt)
             ast.marker:setWorldPos(posAboveActor(ast.actor))
             ast.marker:setAggressive(ast.isAggressive)
         end
+
+        -- Update tweeners here to avoid a second full pass over observerActorStatuses in onUpdate
+        if ast.marker then ast.marker:updateTweeners(dt) end
 
         -- Final cleanup, if no marker and no progress - remove the status object --
         ----------------------------------------------------------------------------
@@ -282,50 +306,49 @@ local function onUpdate(dt)
     ps.isMoving = selfActor:getCurrentSpeed() > 0 or not selfActor:isOnGround()
     ps.isSneaking = omwself.controls.sneak
 
-    -- Fetching invisibility status
-    local activeEffects = selfActor:activeEffects()
-    local invisibilityEffect = activeEffects:getEffect(core.magic.EFFECT_TYPE.Invisibility)
-    ps.isInvisible = (invisibilityEffect ~= nil) and (invisibilityEffect.magnitude > 0)
-
-    -- Fetching chameleon effeect
-    local chameleonEffect = activeEffects:getEffect(core.magic.EFFECT_TYPE.Chameleon)    
-    if chameleonEffect ~= nil then
-        ps.chameleon = chameleonEffect.magnitude
-    end    
-    
-    detectionLogicTick(dt)
-
-    -- Update all active tweeners for markers
-    for actorId, ast in pairs(observerActorStatuses) do
-        if ast.marker then ast.marker:updateTweeners(dt) end
+    -- Fetching invisibility and chameleon status (throttled, effects change infrequently)
+    effectsCheckTimer = effectsCheckTimer + dt
+    if effectsCheckTimer >= effectsCheckPeriod then
+        effectsCheckTimer = 0
+        local activeEffects = selfActor:activeEffects()
+        local invisibilityEffect = activeEffects:getEffect(core.magic.EFFECT_TYPE.Invisibility)
+        ps.isInvisible = (invisibilityEffect ~= nil) and (invisibilityEffect.magnitude > 0)
+        local chameleonEffect = activeEffects:getEffect(core.magic.EFFECT_TYPE.Chameleon)
+        ps.chameleon = chameleonEffect and chameleonEffect.magnitude or 0
     end
 
-    -- Increase the weapon skill while sneaking
-    local weaponObj = selfActor:getEquipment(types.Actor.EQUIPMENT_SLOT.CarriedRight)
-    local skill = "handtohand"
-    if weaponObj then   
-        skill = itemutil.getSkillTypeForEquipment(weaponObj).id        
-    end           
-    stat = selfActor:getSkillStat(skill)    
-    
-    if ps.isSneaking then
-        if modifiedSkill ~= skill then
-            -- if we switched to a different skill, remove old modifier
+    detectionLogicTick(dt)
+
+    -- Weapon skill modifier: only runs while sneaking or when cleaning up a leftover modifier
+    if ps.isSneaking or modifiedSkill then
+        local weaponObj = selfActor:getEquipment(types.Actor.EQUIPMENT_SLOT.CarriedRight)
+        local skill = "handtohand"
+        if weaponObj and types.Weapon.objectIsInstance(weaponObj) then
+            skill = itemutil.getSkillTypeForEquipment(weaponObj).id
+        end
+        local stat = selfActor:getSkillStat(skill)
+
+        if ps.isSneaking then
+            if modifiedSkill ~= skill then
+                -- if we switched to a different skill, remove old modifier
+                if modifiedSkill then
+                    local oldStat = selfActor:getSkillStat(modifiedSkill)
+                    oldStat.modifier = oldStat.modifier - skillMod
+                end
+
+                skillMod = stat.base * settings.WeaponBonus
+                modifiedSkill = skill
+                stat.modifier = stat.modifier + skillMod
+            end
+        else
             if modifiedSkill then
+                -- remove modifier when not sneaking; use modifiedSkill's stat, not current weapon's,
+                -- in case the player unequipped their weapon on the same frame they stopped sneaking
                 local oldStat = selfActor:getSkillStat(modifiedSkill)
                 oldStat.modifier = oldStat.modifier - skillMod
+                modifiedSkill = nil
+                skillMod = 0
             end
-
-            skillMod = stat.base * settings.WeaponBonus            
-            modifiedSkill = skill
-            stat.modifier = stat.modifier + skillMod
-        end        
-    else
-        if modifiedSkill then
-            -- remove modifier when not sneaking
-            stat.modifier = stat.modifier - skillMod
-            modifiedSkill = nil
-            skillMod = 0
         end
     end
 end
@@ -376,7 +399,8 @@ local function onReportAttack(e)
 
     if e.attacker == omwself.object and not ast.isDead then
         ast.fightingPlayer = true
-        ast.isAggressive = true        
+        ast.isAggressive = true
+        ast.isKnockedOut = isActorKnockedOut(e.target)
         observerActorStatuses[e.target.id] = ast
     end
 end

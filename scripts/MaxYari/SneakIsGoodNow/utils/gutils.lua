@@ -756,8 +756,7 @@ function GenericCache:new(ttl)
         local now = core.getRealTime()
 
         if type(data) == "table" then
-            print("Making data readonly") 
-            data = util.makeReadOnly(data) 
+            data = util.makeReadOnly(data)
         end
         
         local cached = {

@@ -100,7 +100,7 @@ end
 -- Method to set the detection progress
 function DetectionMarker:setProgress(progress)
     -- Clamp progress between 0 and 1
-    progress = util.clamp(progress, 0, 1) math.max(0, math.min(1, progress))
+    progress = util.clamp(progress, 0, 1)
     local fillProgress = util.remap(progress, 0, 1, 0.2, 0.8)
     local fillAlpha = gutils.lerp(0.33, 0.8, progress)
     local glowAlpha = gutils.lerp(0.1, 1, progress)

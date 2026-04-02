@@ -7,7 +7,8 @@ return {
     MtoGU = MtoGU,
     GUtoM = GUtoM,
     mod_name = mod_name,
+    KNOCKOUT_SPELL_ID = "detd_sleep",
     e = {
-        ReportAttack = prefix.."ReportAttack"        
+        ReportAttack = prefix.."ReportAttack"
     }
 }

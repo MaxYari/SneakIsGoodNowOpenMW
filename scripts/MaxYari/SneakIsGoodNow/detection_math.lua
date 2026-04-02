@@ -159,7 +159,7 @@ local function elusiveness(distance, ps, extraMods)
     end
 
     local chameleonTerm = ps.chameleon
-    if ps.isInvisible then chameleonTermTerm = 100 end
+    if ps.isInvisible then chameleonTerm = 100 end
     
     local standStillTerm = 1.25 -- not in vanilla, newly added
     if ps.isMoving then
