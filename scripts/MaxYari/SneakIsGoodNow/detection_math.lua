@@ -70,6 +70,11 @@ local function LOS(player, actor)
     -- cast once from center of box to center of box
     local playerBounds = types.Actor.getPathfindingAgentBounds(player) -- Use pathfinding bounds as they should match collider size. If mesh bounding box is used instead - center is sometimes outside the collider.
     local playerHeight = playerBounds.halfExtents.z * 2
+    -- In exteriors the engine returns fixed default bounds that ignore actor scale (e.g. Smooth Sneak scaling the player), in interiors they are already scaled
+    local cell = I.MSS.getCell()
+    if cell and cell.isExterior then
+        playerHeight = playerHeight * (player.scale or 1.0)
+    end
     local playerEyes = player.position + util.vector3(0,0,playerHeight * 0.75)
     local actorEyes = actor:getBoundingBox().center -- Some actors (like creatures) have wonky pathfinding bounds, so better use mesh bounding box here
 
