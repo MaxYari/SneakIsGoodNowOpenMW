@@ -1,4 +1,5 @@
-
+-- Mod version, published to Nexus by .github/workflows/nexus-release.yml (the first `version = ...` in this file)
+local VERSION = "1.1"
 
 local mp = "scripts/MaxYari/SneakIsGoodNow/"
 DebugLevel = 0
@@ -18,6 +19,12 @@ local aggression = require(mp .. "aggression_math")
 local DetectionMarker = require(mp .. "Sneak_ui_elements")
 local settings = require(mp .. 'settings').settings
 local selfActor = gutils.Actor:new(omwself)
+
+-- Max Yari's Script Services (MSS) is a required dependency: checked once, when this script loads.
+if not core.contentFiles.has("MaxYariScriptServices.omwscripts") then
+    print("[Sneak Is Good Now] ERROR: critical dependency is missing: Max Yari's Script Services (MSS). Please install it.")
+    require('openmw.ui').showMessage("Sneak Is Good Now: Critical dependency is missing, please install Max Yari's Script Services (MSS)")
+end
 
 gutils.print("Sneak! E-N-G-A-G-E-D", 0)
 
@@ -47,7 +54,6 @@ local lastCell = nil
 local nearbyCheckTimer = 0
 local nearbyCheckPeriod = 0.2
 
-local effectsCheckTimer = 0
 local effectsCheckPeriod = 0.2
 
 local observerActorStatuses = {}
@@ -136,7 +142,7 @@ end
 -------------------------------------------------------------------------
 local function detectionLogicTick(dt)
     -- Fetching cell changes and removing actors from other cells
-    local cell = omwself.cell
+    local cell = I.MSS.getCell()
     if not lastCell or (lastCell ~= cell and not (lastCell.isExterior and cell.isExterior)) then
         lastCell = cell
         for id, ast in pairs(persistantActorStatuses) do
@@ -171,7 +177,7 @@ local function detectionLogicTick(dt)
 
             if not ast then ast = getAst(actor) end
 
-            local distance = (omwself.position - actor.position):length()
+            local distance = (I.MSS.getPosition() - actor.position):length()
             ast.distance = distance
             ast.isDead = false
 
@@ -306,25 +312,21 @@ local function onUpdate(dt)
     ps.isMoving = selfActor:getCurrentSpeed() > 0 or not selfActor:isOnGround()
     ps.isSneaking = omwself.controls.sneak
 
-    -- Fetching invisibility and chameleon status (throttled, effects change infrequently)
-    effectsCheckTimer = effectsCheckTimer + dt
-    if effectsCheckTimer >= effectsCheckPeriod then
-        effectsCheckTimer = 0
-        local activeEffects = selfActor:activeEffects()
-        local invisibilityEffect = activeEffects:getEffect(core.magic.EFFECT_TYPE.Invisibility)
-        ps.isInvisible = (invisibilityEffect ~= nil) and (invisibilityEffect.magnitude > 0)
-        local chameleonEffect = activeEffects:getEffect(core.magic.EFFECT_TYPE.Chameleon)
-        ps.chameleon = chameleonEffect and chameleonEffect.magnitude or 0
-    end
+    -- Invisibility and chameleon through MSS, re-read at most every effectsCheckPeriod (effects change
+    -- infrequently)
+    local invisibility = I.MSS.getActiveEffect(core.magic.EFFECT_TYPE.Invisibility, effectsCheckPeriod)
+    ps.isInvisible = invisibility ~= nil and invisibility > 0
+    ps.chameleon = I.MSS.getActiveEffect(core.magic.EFFECT_TYPE.Chameleon, effectsCheckPeriod) or 0
 
     detectionLogicTick(dt)
 
     -- Weapon skill modifier: only runs while sneaking or when cleaning up a leftover modifier
     if ps.isSneaking or modifiedSkill then
-        local weaponObj = selfActor:getEquipment(types.Actor.EQUIPMENT_SLOT.CarriedRight)
+        -- The weapon's record through MSS: cached, and only read again when the weapon changes
+        local weaponInfo = I.MSS.getEquipmentInfo(types.Actor.EQUIPMENT_SLOT.CarriedRight)
         local skill = "handtohand"
-        if weaponObj and types.Weapon.objectIsInstance(weaponObj) then
-            skill = itemutil.getSkillTypeForEquipment(weaponObj).id
+        if weaponInfo and weaponInfo.type == types.Weapon then
+            skill = itemutil.weaponEquipmentSkills[weaponInfo.record.type].id
         end
         local stat = selfActor:getSkillStat(skill)
 

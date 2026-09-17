@@ -24,6 +24,7 @@ local types = require("openmw.types")
 local nearby = require("openmw.nearby")
 local core = require("openmw.core")
 local omwself = require("openmw.self")
+local I = require("openmw.interfaces")
 local util = require("openmw.util")
 local ui = require('openmw.ui')
 local aux_util = require('openmw_aux.util')
@@ -49,7 +50,7 @@ module.nearDetectionRange = nearDetectionRange
 local function facingFactor(actor)
     -- 1 if actor is facing player, -1 if facing away
     local facing = actor.rotation:apply(util.vector3(0.0, 1.0, 0.0)):normalize()
-    local relativePos = (omwself.position - actor.position):normalize()
+    local relativePos = (I.MSS.getPosition() - actor.position):normalize()
     return facing:dot(relativePos)
 end
 

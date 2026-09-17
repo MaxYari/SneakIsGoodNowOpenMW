@@ -18,7 +18,7 @@ end
 
 I.Combat.addOnHitHandler(function(a)
     if not a.attacker then return end    
-    if types.Player.objectIsInstance(a.attacker) and a.sourceType == I.Combat.ATTACK_SOURCE_TYPES.Melee or a.sourceType == I.Combat.ATTACK_SOURCE_TYPES.Ranged then 
+    if types.Player.objectIsInstance(a.attacker) and (a.sourceType == I.Combat.ATTACK_SOURCE_TYPES.Melee or a.sourceType == I.Combat.ATTACK_SOURCE_TYPES.Ranged) then
         a.attacker:sendEvent(DEFS.e.ReportAttack, {attacker = a.attacker, target = omwself.object})
     end
 end)
