@@ -8,14 +8,14 @@ function SettingsHelper:new(sectionName)
     local inst = {
         sectionName = sectionName,
         store = storage.playerSection(sectionName),
-        settings = {},
+        _values = {},
         trackedSettings = {}        
     }    
 
     inst.store:subscribe(async:callback(function(val) 
         print("Updating all settings from storage...")
         for key, _ in pairs(inst.trackedSettings) do
-            inst.settings[key] = inst.store:get(key)
+            inst._values[key] = inst.store:get(key)
         end        
     end))
     
@@ -29,9 +29,9 @@ function SettingsHelper:__index(key)
     if rawget(self, key) then return rawget(self, key) end
     if not self.trackedSettings[key] then
         self.trackedSettings[key] = true
-        self.settings[key] = self.store:get(key)
+        self._values[key] = self.store:get(key)
     end
-    return self.settings[key]
+    return self._values[key]
 end
 
 return SettingsHelper
