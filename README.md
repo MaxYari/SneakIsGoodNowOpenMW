@@ -11,6 +11,8 @@ Click on a preview below to watch a release trailer.
 
 - Gradual visual detection progress instead of instant detection.
 
+- Awareness grows with level. In vanilla almost every creature has the same sneak skill from a rat to a Golden Saint, and most NPCs keep 5-8 for life, so sneaking past high level enemies was as easy as sneaking past mudcrabs. Now higher level creatures and NPCs are more alert (adjustable in the settings), while those that were sharp-eyed in vanilla stay that way.
+
 - Weapon skill is boosted by 50% while in sneak stance.
 
 - Slight increase of sneak speed (it's 90% of the walk speed now). Due to how sneak animations and footstep sounds work it *might* feel like sneaking is faster than walking now - it is not, footstep sounds are just more frequent in sneaking stance.
@@ -79,6 +81,8 @@ I also haven't tested this API at all, but I'm sure it will be fiiiiiine ;)
 Thanks to [Blurpandra](https://www.nexusmods.com/profile/blurpandra/mods?gameId=100) for sharing a sneak detection code from Burglary Overhaul mod. To [fallchildren](https://gitlab.com/fallchildren) and [choirbug](https://gitlab.com/olyukha) for inspiring me to try this janky aproach to a sneak overhaul - they are currently working on a "Dark Project" mod (you can find it in OpenMW discor in mods section) which is a more ambitious stealth overhaul inspired by Thief series mechanics. 
 
 Check their mods, especially the [footstep sound mod](https://gitlab.com/fallchildren/openmw-footsteps), choirbug made a whole bunch of very immersive amazing sounds for it (to hear them you will need to change the sound backend in the mod's settings).
+
+Thanks to [Storm Atronach](https://next.nexusmods.com/profile/StormAtronach0) for the animated eye of the stealth reticle, it's the crosshair from their [Stealth Overhaul 2](https://www.nexusmods.com/morrowind/mods/57321), used with permission.
 
 And also to the entirety of the OpenMW community, my inspiration almost always comes from interacting with OpenMW discord, sometimes we have some differences admittedly, but hey, who doesn't? Love you all :3
 

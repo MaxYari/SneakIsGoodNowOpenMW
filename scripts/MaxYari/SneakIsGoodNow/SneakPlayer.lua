@@ -17,7 +17,11 @@ local itemutil = require(mp .. "utils/item_utils")
 local detection = require(mp .. "detection_math")
 local aggression = require(mp .. "aggression_math")
 local DetectionMarker = require(mp .. "Sneak_ui_elements")
+local reticle = require(mp .. "stealth_reticle")
+local lean = require(mp .. "lean")
 local settings = require(mp .. 'settings').settings
+local skillSettings = require(mp .. 'settings').skillSettings
+local uiSettings = require(mp .. 'settings').uiSettings
 local selfActor = gutils.Actor:new(omwself)
 
 -- Max Yari's Script Services (MSS) is a required dependency: checked once, when this script loads.
@@ -31,12 +35,22 @@ gutils.print("Sneak! E-N-G-A-G-E-D", 0)
 local sneakCheckPeriod = 0.33 -- seconds between sneak checks per actor
 local followTargetsCheckPeriod = 2.0 -- seconds between follow target updates per actor
 local losCheckPeriod = 0.2
-local detectionDecreaseRate = 0.25  -- fixed decrease rate per second
+local knockoutCheckPeriod = 0.25
+
+-- Detection meter
+local minDetectDur = 0.6            -- average seconds to be seen at a 0% chance to stay hidden
+local maxDetectDur = 15             -- average seconds to be seen at speedLimitChance (the median lands near 9 s)
+local speedLimitChance = 90         -- above this chance to stay hidden the fill speeds stop changing
+local fillJitter = 1.0              -- how far one roll pushes the fill speed above or below the average
+local successRollsBeforeDrain = 3   -- passed rolls in a row before the meter starts draining
+local inSightDrainRate = 0.10       -- per second, while in sight after successRollsBeforeDrain passed rolls
+local outOfSightDrainRate = 0.25    -- per second, while out of sight
 
 -- "ps" stands for "Player State"
 local ps = {
     isSneaking = false,
     detectedByNonAggro = false,
+    hostileInSight = false,
     isMoving = false,
     isInvisible = false,
     chameleon = 0
@@ -94,19 +108,22 @@ end
 
 
 
-local function getDetectionVelocity(sneakChance)
-    -- returns a velocity multiplier based on sneak chance
-    -- sneakChance is 0-100
-    -- at 0 sneakChance, velocity is 2.0 (detected quickly)
-    -- at 100 sneakChance, velocity is 0.05 (detection slows to a crawl)
-    local maxDetectDur = 8
-    local minDetectDur = 0.5
-    if not sneakChance then
-        sneakChance = 0
-    end
-
-    local detectDur = util.remap(sneakChance, 0, 100, minDetectDur, maxDetectDur)
-    return 1 / detectDur
+-- Meter fill speeds (per second) after a failed and after a passed roll.
+-- The chance to stay hidden sets the average speed, so the meter fills in about detectDur seconds,
+-- and each roll only pushes the speed above (failed) or below (passed) that average. Passed rolls
+-- in a row drain the meter instead, and that drain is already counted into the average.
+-- Above speedLimitChance the speeds stop changing: drain streaks take over and the time to be seen
+-- climbs on its own (about 29 s at 95%, never at 100% where no roll can fail).
+local function getFillSpeeds(sneakChance)
+    local p = math.min(sneakChance or 0, speedLimitChance) / 100
+    local detectDur = minDetectDur + (maxDetectDur - minDetectDur) * (p * 100 / speedLimitChance) ^ 2.5
+    -- Share of rolls that fail, pass, or pass as part of a draining streak
+    local drainShare = p ^ successRollsBeforeDrain
+    local failShare, passShare = 1 - p, p - drainShare
+    local failMult = 1 + fillJitter * p
+    local passMult = 1 - fillJitter * (1 - p)
+    local base = (1 / detectDur + drainShare * inSightDrainRate) / (failShare * failMult + passShare * passMult)
+    return base * failMult, base * passMult
 end
 
 local function posAboveActor(actor)
@@ -130,12 +147,35 @@ end
 
 
 
+-- Fatigue below zero is the engine's own knockout. Gothic Style Knockout drops it to -300 (and it regenerates
+-- only a few points a second), plain exhaustion rarely gets anywhere near -100, so by default only those deep
+-- knockouts count. The "KnockoutLosesTrack" setting makes any knockout count.
+local DEEP_KNOCKOUT_FATIGUE = -100
+
+local function isFatigueKnockedOut(actor)
+    local threshold = settings.KnockoutLosesTrack and 0 or DEEP_KNOCKOUT_FATIGUE
+    return types.Actor.stats.dynamic.fatigue(actor).current < threshold
+end
+
 local function isActorKnockedOut(actor)
+    if isFatigueKnockedOut(actor) then return true end
+    -- Devilish Sleep Spell
     for _, spell in pairs(types.Actor.activeSpells(actor)) do
         if spell.id == DEFS.KNOCKOUT_SPELL_ID then return true end
     end
     return false
 end
+
+-- The engine gives sneak skill for avoiding the notice of anyone in sight, hostile or not. Here it's only
+-- given while a hostile actor (a red marker) is in sight, so sneaking around friendly NPCs doesn't train it.
+-- All sneak skill gains are then scaled by the "SneakSkillGainMult" setting.
+I.SkillProgression.addSkillUsedHandler(function(skillid, params)
+    if skillid ~= "sneak" then return end
+    if params.useType == I.SkillProgression.SKILL_USE_TYPES.Sneak_AvoidNotice and not ps.hostileInSight then
+        return false
+    end
+    params.skillGain = params.skillGain * skillSettings.SneakSkillGainMult
+end)
 
 
 -- Main logic starts here -----------------------------------------------
@@ -191,6 +231,10 @@ local function detectionLogicTick(dt)
     end
     
     ps.detectedByNonAggro = false
+    ps.hostileInSight = false
+    local now = core.getSimulationTime()
+    -- The most alert observer, shown by the stealth reticle
+    local topProgress, topAggressive = 0, true
     for actorId, ast in pairs(observerActorStatuses) do
         -- LOS check for all observer actors (regardless of detection range)
         if ast.losChecker == nil then
@@ -206,7 +250,7 @@ local function detectionLogicTick(dt)
         end
 
         ast.inLOS = ast.losChecker(omwself.object, ast.actor)
-        local isNotDetected, newSneakChance = ast.sneakChecker(ast, ps, extraMods)
+        local isNotDetected, newSneakChance, rollState = ast.sneakChecker(ast, ps, extraMods)
         ast.followTargetsChecker(ast.actor)
 
         ast.noticing = not isNotDetected
@@ -220,14 +264,24 @@ local function detectionLogicTick(dt)
 
         -- Manage detection progress ----
         ---------------------------------
-        local detectionVel = getDetectionVelocity(ast.sneakChance)
-
         if ast.progress == nil then ast.progress = 0.0 end
         if ast.successRolls == nil then ast.successRolls = 0 end
+        -- Passed rolls in a row: counted per roll, the checker returns its cached result between rolls
+        if rollState == "new" then
+            ast.successRolls = isNotDetected and ast.successRolls + 1 or 0
+        end
+        local failSpeed, passSpeed = getFillSpeeds(ast.sneakChance)
 
-        -- Handle knocked out actors (Devilish Sleep Spell compatibility)
-        if ast.isKnockedOut then
-            ast.isKnockedOut = isActorKnockedOut(ast.actor)
+        -- Handle knocked out actors (Gothic Style Knockout, Devilish Sleep Spell): they can't see or fight.
+        -- A knockout blow also makes an actor fight the player, and its fatigue drop lands a frame after the
+        -- hit report, so the fatigue of an actor fighting the player is read on every tick
+        if ast.actor:isValid() then
+            if now >= (ast.nextKnockoutCheck or 0) then
+                ast.isKnockedOut = isActorKnockedOut(ast.actor)
+                ast.nextKnockoutCheck = now + knockoutCheckPeriod
+            elseif ast.fightingPlayer and not ast.isKnockedOut then
+                ast.isKnockedOut = isFatigueKnockedOut(ast.actor)
+            end
         end
 
         -- Handle dead/invalid actors
@@ -239,36 +293,43 @@ local function detectionLogicTick(dt)
             ast.noticing = true
             ast.progress = 1.0
         elseif not ast.inLOS then
-            -- Out of LOS: immediate fixed decrease, set successRolls to 3
-            ast.progress = math.max(0.0, ast.progress - dt * detectionDecreaseRate)
-            ast.successRolls = 3
+            -- Out of LOS: drain at a fixed rate, and count it as a streak of passed rolls
+            ast.progress = math.max(0.0, ast.progress - dt * outOfSightDrainRate)
+            ast.successRolls = successRollsBeforeDrain
         elseif ast.noticing then
-            -- Detected: increase with sneak-based velocity, reset counter
-            ast.progress = math.min(1.0, ast.progress + dt * detectionVel)
-            ast.successRolls = 0
+            -- Failed roll: fill faster than average
+            ast.progress = math.min(1.0, ast.progress + dt * failSpeed)
+        elseif ast.successRolls < successRollsBeforeDrain then
+            -- Passed roll: keep filling, slower than average
+            ast.progress = math.max(0.0, math.min(1.0, ast.progress + dt * passSpeed))
         else
-            -- Not detected: count success rolls
-            ast.successRolls = ast.successRolls + 1
-            if ast.successRolls >= 3 then
-                -- After 3 successes, start decreasing at fixed rate
-                ast.progress = math.max(0.0, ast.progress - dt * detectionDecreaseRate)
-            end
-            -- else: progress stays same
+            -- Several passed rolls in a row: the observer calms down
+            ast.progress = math.max(0.0, ast.progress - dt * inSightDrainRate)
         end
 
         -- Send spotted event and break sneak only when detection progress reaches 1.0
         if ast.progress >= 1.0 then
             if ast.isAggressive then
-                omwself.controls.sneak = false  -- Break sneak when fully detected 
+                omwself.controls.sneak = false  -- Break sneak when fully detected
             else
                 ps.detectedByNonAggro = true
             end
         end
 
+        if ast.inLOS and ast.isAggressive and not ast.isDead and not ast.isKnockedOut then
+            ps.hostileInSight = true
+        end
+
+        if not ast.isDead and not ast.isKnockedOut and ast.progress > topProgress then
+            topProgress = ast.progress
+            topAggressive = ast.isAggressive
+        end
+
         -- Manage ui markers ------------------
         ---------------------------------------
         -- Show markers only when sneaking and detection progress is happening
-        local shouldShowMarker = ps.isSneaking and not ast.isDead and not ast.isKnockedOut and ast.inLOS
+        local shouldShowMarker = uiSettings.ShowMarkers and ps.isSneaking and not ast.isDead and not ast.isKnockedOut
+            and ast.inLOS
         if shouldShowMarker then
             -- If marker doesnt exist but should - make it
             if not ast.marker then ast.marker = DetectionMarker:new() end
@@ -293,20 +354,26 @@ local function detectionLogicTick(dt)
         if ast.marker then ast.marker:updateTweeners(dt) end
 
         -- Final cleanup, if no marker and no progress - remove the status object --
+        -- While sneaking, an observer in sight stays even without a marker (markers can be turned off), it's
+        -- what tells a hostile is in sight for the sneak skill
         ----------------------------------------------------------------------------
-        if (ast.marker == nil) and (ast.progress <= 0.0) then
+        if (ast.marker == nil) and (ast.progress <= 0.0) and not (ps.isSneaking and ast.inLOS) then
             observerActorStatuses[actorId] = nil
         end
 
         ::continue::
     end
+
+    reticle.update(dt, ps.isSneaking and uiSettings.ShowReticle, topProgress, topAggressive)
 end
 
 
 local function onUpdate(dt)
     if dt == 0 then
         return
-    end   
+    end
+
+    lean.update(dt)
 
     -- Fetching locomotion statuses
     ps.isMoving = selfActor:getCurrentSpeed() > 0 or not selfActor:isOnGround()
@@ -338,7 +405,7 @@ local function onUpdate(dt)
                     oldStat.modifier = oldStat.modifier - skillMod
                 end
 
-                skillMod = stat.base * settings.WeaponBonus
+                skillMod = stat.base * skillSettings.WeaponBonus
                 modifiedSkill = skill
                 stat.modifier = stat.modifier + skillMod
             end
@@ -409,6 +476,7 @@ local function onReportAttack(e)
         ast.fightingPlayer = true
         ast.isAggressive = true
         ast.isKnockedOut = isActorKnockedOut(e.target)
+        ast.nextKnockoutCheck = core.getSimulationTime() + knockoutCheckPeriod
         observerActorStatuses[e.target.id] = ast
     end
 end
@@ -429,6 +497,7 @@ end
 
 return {    
     engineHandlers = {
+        onFrame = lean.onFrame,
         onUpdate = onUpdate,
         onSave = onSave,
         onLoad = onLoad

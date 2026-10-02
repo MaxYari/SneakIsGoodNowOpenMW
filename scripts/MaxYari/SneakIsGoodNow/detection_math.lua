@@ -97,10 +97,21 @@ module.LOS = LOS
 ------------------------------------------------------
 local closeRangeDistMax = DEFS.MtoGU * 7.0
 local closeRangeDistMin = DEFS.MtoGU * 1.0
-local function awareness(ast, ps, extraMods)
-    -- https://en.uesp.net/wiki/Morrowind:Sneak    
 
-    local sneakTerm = ast.gactor:getSneakValue()
+-- Level-based floor for the observer's sneak. Most creatures keep the default stealth 20 of their record,
+-- and NPCs without Sneak in their class keep 5-8, at every level. The actor's own value wins when higher.
+local function sneakFloor(ast)
+    local isNpc = types.NPC.objectIsInstance(ast.actor)
+    local base = isNpc and settings.NpcFloorBase or settings.CreatureFloorBase
+    local perLevel = isNpc and settings.NpcFloorPerLevel or settings.CreatureFloorPerLevel
+    local level = ast.gactor:levelStat().current
+    return math.min(100, base + perLevel * (level - 1))
+end
+
+local function awareness(ast, ps, extraMods)
+    -- https://en.uesp.net/wiki/Morrowind:Sneak
+
+    local sneakTerm = math.max(ast.gactor:getSneakValue(), sneakFloor(ast))
     local agilityTerm = ast.gactor:getAttributeStat("agility").modified / 5
     local luckTerm = ast.gactor:getAttributeStat("luck").modified / 10
 

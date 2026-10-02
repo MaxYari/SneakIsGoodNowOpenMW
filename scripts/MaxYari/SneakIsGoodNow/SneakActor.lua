@@ -7,6 +7,7 @@ local I = require('openmw.interfaces')
 
 
 local DEFS = require(mp .. 'utils/sneak_defs')
+local wanderPacing = require(mp .. 'wander_pacing')
 
 
 local function onGetFollowTargets(dt)
@@ -23,6 +24,11 @@ I.Combat.addOnHitHandler(function(a)
     end
 end)
 
-return {    
+return {
+    engineHandlers = {
+        onActive = wanderPacing.onActive,
+        onSave = wanderPacing.onSave,
+        onLoad = wanderPacing.onLoad,
+    },
     eventHandlers = { MaxYariUtil_GetFollowTargets = onGetFollowTargets }
 }
