@@ -14,16 +14,14 @@ local DetectionMarker = {}
 DetectionMarker.__index = DetectionMarker
 
 -- Config
-local markerSizeScale = 1.0
 local markerBgColor = util.color.hex("0f0f1f")
 local markerFillColor = util.color.hex("efc36b")
 local markerFillDangerColor = util.color.hex("c01c28") -- Saturated red for danger
 local markerGrayColor = util.color.hex("808080") -- Gray for non-aggressive
 
-local markerSize= util.vector2(50, 50) * markerSizeScale -- Size of the detection marker UI element
-local disapearAnimSize = markerSize * 1.5 -- Size to scale to when disappearing
+local disappearAnimScale = 1.5 -- How much a marker grows when its NPC spots the player
 
--- Arrow beside an off-screen marker, pointing where to turn. Image widgets can't rotate, so the atlas made by
+-- Arrow beside an off-screen marker, pointing where to turn (sizes at "Marker size" 1). Image widgets can't rotate, so the atlas made by
 -- tools/gen_detection_ui_textures.py holds 32 rotations, clockwise from pointing right
 local arrowSize = util.vector2(20, 20)
 local arrowGap = 4
@@ -48,13 +46,14 @@ DetectionMarker.detectionColor = detectionColor
 
 local whiteTexture = ui.texture { path = 'white' }
 
--- Marker styles: what's inside the marker, how it shows progress, and how it's resized (the disappear animation
--- grows the marker of an NPC that spotted the player)
+-- Marker styles: their size at "Marker size" 1, what's inside the marker, how it shows progress, and how it's
+-- resized (the disappear animation grows the marker of an NPC that spotted the player)
 local styles = {}
 
 -- A crescent filling up from the bottom, with a glow
 styles.crescent = {
-    content = function()
+    size = util.vector2(50, 50),
+    content = function(size)
         return ui.content {
             {
                 name = "detectionMarkerBg",
@@ -91,7 +90,7 @@ styles.crescent = {
                         type = ui.TYPE.Image,
                         props = {
                             alpha = 0.8,
-                            size = markerSize, -- Same as parent to fill when relativeSize is 1,1
+                            size = size, -- Same as parent to fill when relativeSize is 1,1
                             color = markerFillColor,
                             relativePosition = util.vector2(0.5, 1),
                             anchor = util.vector2(0.5, 1),
@@ -120,6 +119,7 @@ styles.crescent = {
 -- A vanilla-looking box: the thin menu border around a dark background, with a rectangle growing from the center
 -- that fills it at full detection
 styles.box = {
+    size = util.vector2(25, 25),
     template = function() return I.MWUI.templates.borders end,
     content = function()
         return ui.content {
@@ -173,18 +173,20 @@ function DetectionMarker:new()
     instance.isAggressive = false
 
     instance.style = styleBySetting[s.uiSettings.MarkerStyle] or styles.crescent
+    instance.scale = s.uiSettings.MarkerScale or 1
+    instance.size = instance.style.size * instance.scale
     instance.element = ui.create({
         layer = 'HUD',
         type = ui.TYPE.Widget,
         template = instance.style.template and instance.style.template() or nil,
         name = "detectionMarkerWrapper",
         props = {
-            size = markerSize,
+            size = instance.size,
             alpha = 0, -- Start with alpha 0 for appear animation
             position = util.vector2(0, 0), -- Will be set by setWorldPos
             anchor = util.vector2(0.5, 1),
         },
-        content = instance.style.content(),
+        content = instance.style.content(instance.size),
     })
 
     instance.color = markerFillColor
@@ -192,7 +194,7 @@ function DetectionMarker:new()
         layer = 'HUD',
         type = ui.TYPE.Image,
         props = {
-            size = arrowSize,
+            size = arrowSize * instance.scale,
             anchor = util.vector2(0.5, 0.5),
             visible = false,
             alpha = 0,
@@ -268,14 +270,14 @@ function DetectionMarker:setWorldPos(worldPos)
     -- area is inset by the marker and the arrow beside it, so both stay inside it
     local halfWidth = screenSize.x * util.clamp(s.uiSettings.MarkerPinWidth or 0.75, 0.2, 1) * 0.5
     local halfHeight = screenSize.y * 0.5
-    local arrowDistance = markerSize.x * 0.5 + arrowGap + arrowSize.x * 0.5
-    local inset = arrowDistance + arrowSize.x * 0.5
+    local arrowDistance = self.size.x * 0.5 + (arrowGap + arrowSize.x * 0.5) * self.scale
+    local inset = arrowDistance + arrowSize.x * 0.5 * self.scale
     local scaleX = math.abs(dir.x) > 0 and (math.max(0, halfWidth - inset) / math.abs(dir.x)) or math.huge
     local scaleY = math.abs(dir.y) > 0 and (math.max(0, halfHeight - inset) / math.abs(dir.y)) or math.huge
     local markerCenter = center + dir * math.min(scaleX, scaleY)
 
     -- The marker's anchor is its bottom center
-    local markerPos = markerCenter + util.vector2(0, markerSize.y * 0.5)
+    local markerPos = markerCenter + util.vector2(0, self.size.y * 0.5)
     self.element.layout.props.relativePosition = util.vector2(markerPos.x / screenSize.x, markerPos.y / screenSize.y)
     self.element:update()
 
@@ -362,7 +364,7 @@ function DetectionMarker:disappear(wasSuccessful, autoDestroy)
         function(value)
             -- Interpolate between current size and disappear size using gutils.lerp
             if wasSuccessful == true then
-                self.style.setSize(self.element, gutils.lerp(initialSize, disapearAnimSize, value))
+                self.style.setSize(self.element, gutils.lerp(initialSize, self.size * disappearAnimScale, value))
             end
 
             -- Interpolate alpha from current alpha to 0 using gutils.lerp            

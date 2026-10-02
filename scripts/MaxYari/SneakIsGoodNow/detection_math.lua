@@ -98,12 +98,16 @@ module.LOS = LOS
 local closeRangeDistMax = DEFS.MtoGU * 7.0
 local closeRangeDistMin = DEFS.MtoGU * 1.0
 
--- Level-based floor for the observer's sneak. Most creatures keep the default stealth 20 of their record,
--- and NPCs without Sneak in their class keep 5-8, at every level. The actor's own value wins when higher.
+-- Level-based floor for the observer's sneak: its value at level 1, plus perLevel for each level above.
+-- Most creatures keep the default stealth 20 of their record, and NPCs without Sneak in their class keep 5-8,
+-- at every level. The actor's own value wins when higher.
+local creatureFloorBase, creatureFloorPerLevel = 20, 2.5
+local npcFloorBase, npcFloorPerLevel = 10, 2.5
 local function sneakFloor(ast)
+    if not settings.ScaleAwarenessWithLevel then return 0 end
     local isNpc = types.NPC.objectIsInstance(ast.actor)
-    local base = isNpc and settings.NpcFloorBase or settings.CreatureFloorBase
-    local perLevel = isNpc and settings.NpcFloorPerLevel or settings.CreatureFloorPerLevel
+    local base = isNpc and npcFloorBase or creatureFloorBase
+    local perLevel = isNpc and npcFloorPerLevel or creatureFloorPerLevel
     local level = ast.gactor:levelStat().current
     return math.min(100, base + perLevel * (level - 1))
 end

@@ -15,7 +15,7 @@ local s = require(mp .. "settings")
 local FRAMES = 21
 local COLUMNS = 8
 local CELL = 128
-local SIZE = util.vector2(128, 128)
+local SIZE = util.vector2(128, 128)   -- at "Reticle size" 1
 local FOLLOW_SPEED = 8      -- how quickly the eye follows the detection progress
 local FADE_SPEED = 10
 local WHITE = util.color.rgb(1, 1, 1)
@@ -46,7 +46,7 @@ end
 
 -- visible: whether the reticle should be shown at all (sneaking, and enabled in the settings)
 local function update(dt, visible, progress, isAggressive)
-    local targetAlpha = visible and s.uiSettings.MarkersAlpha or 0
+    local targetAlpha = visible and s.uiSettings.ReticleAlpha or 0
     alpha = smooth(alpha, targetAlpha, FADE_SPEED, dt)
     if targetAlpha == 0 and alpha < 0.01 then alpha = 0 end
     local targetProgress = visible and progress or 0
@@ -66,12 +66,12 @@ local function update(dt, visible, progress, isAggressive)
     local frame = math.floor(shownProgress * (FRAMES - 1) + 0.5)
     local shownAlpha = math.floor(alpha * 50 + 0.5) / 50
     local colorStep = colored and math.floor(shownProgress * 200 + 0.5) + (isAggressive and 1000 or 0) or -1
-    local x, y = s.uiSettings.ReticleX, s.uiSettings.ReticleY
+    local x, y, scale = s.uiSettings.ReticleX, s.uiSettings.ReticleY, s.uiSettings.ReticleScale
     if frame == shown.frame and shownAlpha == shown.alpha and colorStep == shown.colorStep
-        and x == shown.x and y == shown.y then
+        and x == shown.x and y == shown.y and scale == shown.scale then
         return
     end
-    shown.frame, shown.alpha, shown.colorStep, shown.x, shown.y = frame, shownAlpha, colorStep, x, y
+    shown.frame, shown.alpha, shown.colorStep, shown.x, shown.y, shown.scale = frame, shownAlpha, colorStep, x, y, scale
 
     local props = element.layout.props
     props.resource = (colored and tintableFrames or originalFrames)[frame]
@@ -79,6 +79,7 @@ local function update(dt, visible, progress, isAggressive)
     props.alpha = shownAlpha
     props.visible = shownAlpha > 0
     props.relativePosition = util.vector2(x, y)
+    props.size = SIZE * scale
     element:update()
 end
 

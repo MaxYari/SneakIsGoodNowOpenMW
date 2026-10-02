@@ -364,7 +364,7 @@ local function detectionLogicTick(dt)
         ::continue::
     end
 
-    reticle.update(dt, ps.isSneaking and uiSettings.ShowReticle, topProgress, topAggressive)
+    reticle.update(dt, ps.isSneaking and uiSettings.ShowAnimatedReticle, topProgress, topAggressive)
 end
 
 

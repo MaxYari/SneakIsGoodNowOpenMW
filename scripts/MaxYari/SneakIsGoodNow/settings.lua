@@ -73,50 +73,13 @@ I.Settings.registerGroup {
             description = "Multiplies enemy attentiveness. Higher values make enemies more attentive."
         },
         {
-            key = "CreatureFloorBase",
-            renderer = "number",
-            default = 20,
-            argument = {
-                min = 0,
-                max = 100
-            },
-            name = "Creature awareness at level 1",
-            description = "Lowest sneak skill a creature notices you with at level 1. Most creatures have 20 at every level, " ..
-                "so this floor is what makes higher level creatures more alert. A creature's own value wins when it is higher."
-        },
-        {
-            key = "CreatureFloorPerLevel",
-            renderer = "number",
-            default = 2.5,
-            argument = {
-                min = 0,
-                max = 10
-            },
-            name = "Creature awareness per level",
-            description = "How much the creature floor rises with each creature level above 1."
-        },
-        {
-            key = "NpcFloorBase",
-            renderer = "number",
-            default = 10,
-            argument = {
-                min = 0,
-                max = 100
-            },
-            name = "NPC awareness at level 1",
-            description = "Lowest sneak skill an NPC notices you with at level 1. NPCs without Sneak in their class have 5-8 at " ..
-                "every level. An NPC's own value wins when it is higher."
-        },
-        {
-            key = "NpcFloorPerLevel",
-            renderer = "number",
-            default = 2.5,
-            argument = {
-                min = 0,
-                max = 10
-            },
-            name = "NPC awareness per level",
-            description = "How much the NPC floor rises with each NPC level above 1. Guards are level 20-29."
+            key = "ScaleAwarenessWithLevel",
+            renderer = "checkbox",
+            default = true,
+            name = "Scale minimum awareness value with NPC/Creature level",
+            description = "Most creatures have the same sneak skill from a rat to a Golden Saint, and NPCs without Sneak in " ..
+                "their class keep 5-8 for life. When on, higher level creatures and NPCs notice you better. Those with " ..
+                "a higher sneak of their own keep it."
         },
         {
             key = "KnockoutLosesTrack",
@@ -168,7 +131,7 @@ I.Settings.registerGroup {
     page = 'SneakIsGoodNowPage',
     l10n = 'SneakIsGoodNow',
     name = 'Detection indicators',
-    description = "How you see who is noticing you while sneaking. Markers and reticle can be used together or on their own.",
+    description = "How you see who is noticing you while sneaking. Markers and the reticle can be used together or on their own.",
     permanentStorage = true,
     order = 2,
     settings = {
@@ -180,8 +143,8 @@ I.Settings.registerGroup {
                 min = 0,
                 max = 1
             },
-            name = "Opacity",
-            description = "Opacity of the markers and the reticle."
+            name = "Marker opacity",
+            description = "Opacity of the floating markers."
         },
         {
             key = "ShowMarkers",
@@ -203,6 +166,17 @@ I.Settings.registerGroup {
                 "menu border, filled by a rectangle growing from its center."
         },
         {
+            key = "MarkerScale",
+            renderer = "number",
+            default = 1,
+            argument = {
+                min = 0.25,
+                max = 3
+            },
+            name = "Marker size",
+            description = "Scales the floating markers of both styles, and the arrows of off-screen ones."
+        },
+        {
             key = "MarkerPinWidth",
             renderer = "number",
             default = 0.75,
@@ -215,11 +189,33 @@ I.Settings.registerGroup {
                 "as a fraction of the screen width, with an arrow pointing where to turn. 0.75 is 4:3 on a 16:9 screen."
         },
         {
-            key = "ShowReticle",
+            key = "ShowAnimatedReticle",
             renderer = "checkbox",
-            default = true,
-            name = "Stealth reticle",
-            description = "An eye that opens as you're being noticed, showing the most alert NPC around."
+            default = false,
+            name = "Animated stealth reticle",
+            description = "An eye that opens as you're being noticed, showing the most alert NPC around. " ..
+                "From Stealth Overhaul 2 by Storm Atronach."
+        },
+        {
+            key = "ReticleScale",
+            renderer = "number",
+            default = 0.75,
+            argument = {
+                min = 0.25,
+                max = 2
+            },
+            name = "Reticle size",
+            description = "1 is the eye's original size."
+        },
+        {
+            key = "ReticleAlpha",
+            renderer = "number",
+            default = 1,
+            argument = {
+                min = 0,
+                max = 1
+            },
+            name = "Reticle opacity"
         },
         {
             key = "ReticleColored",
