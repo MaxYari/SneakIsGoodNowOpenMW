@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Generates the detection UI texture atlases (needs ImageMagick's `magick` and rsvg-convert):
 
-  textures/stealth_reticle_atlas.png - the 21 crosshair frames of Stealth Overhaul 2 by Storm Atronach
+  textures/animated_eye_atlas_<size>.png  - the 21 crosshair frames of Stealth Overhaul 2 by Storm Atronach
                                         (https://www.nexusmods.com/morrowind/mods/57321, used with permission),
-                                        128x128 each, 8 columns x 3 rows, reordered from closed (0) to open (20).
-  textures/stealth_reticle_atlas_white.png - the same frames turned white, so the game can tint them.
+                                        8 columns x 3 rows, reordered from closed (0) to open (20). Its 128 px frames
+                                        are scaled down here to each eye size (96 Big, 72 Medium, 48 Small), so the game
+                                        draws them 1:1 instead of shrinking them itself, which looks jagged.
+  textures/animated_eye_atlas_<size>_white.png - the same frames turned white, so the game can tint them.
   textures/marker_arrow_atlas.png    - 32 rotations of a triangle, 32x32 each, 8 columns x 4 rows.
                                         Rotation k points at k * 360/32 degrees, clockwise from screen right.
 
@@ -20,21 +22,23 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "scripts", "MaxYari", "SneakIsGoodNow", "textures")
 
 COLUMNS = 8
-RETICLE_FRAMES = 21
+EYE_FRAMES = 21
+EYE_SIZES = (96, 72, 48)  # animated_eye.lua's SIZES
 ARROW_DIRECTIONS = 32
 
 
-def reticle_atlas(so2_frames, white):
-    cell = 128
-    rows = -(-RETICLE_FRAMES // COLUMNS)
+def eye_atlas(so2_frames, cell, white):
+    rows = -(-EYE_FRAMES // COLUMNS)
     command = ["magick", "-size", f"{cell * COLUMNS}x{cell * rows}", "xc:none"]
     recolor = ["-fill", "white", "-colorize", "100"] if white else []
-    for i in range(RETICLE_FRAMES):
+    for i in range(EYE_FRAMES):
         # Stealth Overhaul's frame 1 is open and 21 closed
-        frame = os.path.join(so2_frames, f"{RETICLE_FRAMES - i}.dds")
+        frame = os.path.join(so2_frames, f"{EYE_FRAMES - i}.dds")
         x, y = (i % COLUMNS) * cell, (i // COLUMNS) * cell
-        command += ["(", frame, "-alpha", "on", *recolor, ")", "-geometry", f"+{x}+{y}", "-composite"]
-    path = os.path.join(OUT, "stealth_reticle_atlas_white.png" if white else "stealth_reticle_atlas.png")
+        # Scaled in linear light, so the thin lines don't come out darker than they are
+        resize = ["-colorspace", "RGB", "-filter", "Lanczos", "-resize", f"{cell}x{cell}", "-colorspace", "sRGB"]
+        command += ["(", frame, "-alpha", "on", *recolor, *resize, ")", "-geometry", f"+{x}+{y}", "-composite"]
+    path = os.path.join(OUT, f"animated_eye_atlas_{cell}{'_white' if white else ''}.png")
     # PNG32: plain RGBA, ImageMagick would otherwise save white frames as gray + alpha
     subprocess.run(command + ["PNG32:" + path], check=True)
     print("wrote", os.path.relpath(path, ROOT))
@@ -74,6 +78,7 @@ def arrow_atlas():
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        reticle_atlas(sys.argv[1], white=False)
-        reticle_atlas(sys.argv[1], white=True)
+        for size in EYE_SIZES:
+            eye_atlas(sys.argv[1], size, white=False)
+            eye_atlas(sys.argv[1], size, white=True)
     arrow_atlas()

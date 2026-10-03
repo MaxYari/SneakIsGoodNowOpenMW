@@ -7,6 +7,7 @@ local I = require("openmw.interfaces")
 
 local gutils = require(mp .. 'utils/gutils')
 local Tweener = require(mp .. 'utils/tweener')
+local hud = require(mp .. 'utils/hud')
 local s = require(mp .. "settings")
 
 -- DetectionMarker class
@@ -116,10 +117,10 @@ styles.crescent = {
     end,
 }
 
--- A vanilla-looking box: the thin menu border around a dark background, with a rectangle growing from the center
--- that fills it at full detection
-styles.box = {
-    size = util.vector2(25, 25),
+-- A vanilla-looking bar: the thin menu border around a dark background, filled by a rectangle as tall as the bar,
+-- growing sideways from its middle
+styles.bar = {
+    size = util.vector2(33, 8),
     template = function() return I.MWUI.templates.borders end,
     content = function()
         return ui.content {
@@ -149,7 +150,7 @@ styles.box = {
     end,
     setProgress = function(element, progress, color)
         local fill = element.layout.content["fill"]
-        fill.props.relativeSize = util.vector2(progress, progress)
+        fill.props.relativeSize = util.vector2(progress, 1)
         fill.props.color = color
     end,
     setSize = function(element, size)
@@ -159,7 +160,7 @@ styles.box = {
 
 local styleBySetting = {
     ["Crescent"] = styles.crescent,
-    ["Vanilla box"] = styles.box,
+    ["Vanilla bar"] = styles.bar,
 }
 
 -- Constructor that creates a new UI element upon instantiation
@@ -220,7 +221,6 @@ end
 
 function DetectionMarker:setWorldPos(worldPos)
     local screenSize = ui.screenSize()
-    local center = util.vector2(screenSize.x * 0.5, screenSize.y * 0.5)
 
     -- Projected screen position (for on-screen case)
     local proj = camera.worldToViewportVector(worldPos)
@@ -267,24 +267,27 @@ function DetectionMarker:setWorldPos(worldPos)
     end
 
     -- Pinned to the edges of a centered area narrower than the screen, so it isn't lost in the periphery. The
-    -- area is inset by the marker and the arrow beside it, so both stay inside it
-    local halfWidth = screenSize.x * util.clamp(s.uiSettings.MarkerPinWidth or 0.75, 0.2, 1) * 0.5
-    local halfHeight = screenSize.y * 0.5
+    -- area is inset by the marker and the arrow beside it, so both stay inside it. Worked out in UI units, the
+    -- ones the marker and arrow sizes are in, so they keep their spacing at any UI scale
+    local hudSize = hud.size()
+    local hudCenter = hudSize * 0.5
+    local halfWidth = hudSize.x * util.clamp(s.uiSettings.MarkerPinWidth or 0.75, 0.2, 1) * 0.5
+    local halfHeight = hudSize.y * 0.5
     local arrowDistance = self.size.x * 0.5 + (arrowGap + arrowSize.x * 0.5) * self.scale
     local inset = arrowDistance + arrowSize.x * 0.5 * self.scale
     local scaleX = math.abs(dir.x) > 0 and (math.max(0, halfWidth - inset) / math.abs(dir.x)) or math.huge
     local scaleY = math.abs(dir.y) > 0 and (math.max(0, halfHeight - inset) / math.abs(dir.y)) or math.huge
-    local markerCenter = center + dir * math.min(scaleX, scaleY)
+    local markerCenter = hudCenter + dir * math.min(scaleX, scaleY)
 
     -- The marker's anchor is its bottom center
     local markerPos = markerCenter + util.vector2(0, self.size.y * 0.5)
-    self.element.layout.props.relativePosition = util.vector2(markerPos.x / screenSize.x, markerPos.y / screenSize.y)
+    self.element.layout.props.relativePosition = util.vector2(markerPos.x / hudSize.x, markerPos.y / hudSize.y)
     self.element:update()
 
     local arrowPos = markerCenter + dir * arrowDistance
     local direction = math.floor(math.atan2(dir.y, dir.x) / (2 * math.pi) * ARROW_DIRECTIONS + 0.5) % ARROW_DIRECTIONS
     local arrowProps = self.arrow.layout.props
-    arrowProps.relativePosition = util.vector2(arrowPos.x / screenSize.x, arrowPos.y / screenSize.y)
+    arrowProps.relativePosition = util.vector2(arrowPos.x / hudSize.x, arrowPos.y / hudSize.y)
     arrowProps.resource = arrowTextures[direction]
     arrowProps.color = self.color
     arrowProps.alpha = self.element.layout.props.alpha

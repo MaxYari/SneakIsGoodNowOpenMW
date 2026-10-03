@@ -2,20 +2,29 @@
 
 # ☯︎ Sneak! - Sneak is good now.
 
-An OpenMW mod that makes sneak mechanics playable. Sneak detection is now a visually displayed gradual progress. It loosely follows original sneak detection formulas in a sense that whichever creature was difficult to sneak by in the original will also be difficult to sneak by now. There are many small tweaks to how those formulas work and how they translate into a gradual detection progress, aimed at providing a more fun gameplay experience. This mod attempts to strike a balance between gamified mechanics and """realism""".
+An OpenMW mod that makes sneak mechanics playable. Sneak detection is now a visually displayed gradual progress. It loosely follows original sneak detection formulas in a sense that everythin in the original that will make it easier to sneak (sneak skill, magic effect) affects your sneaking endeavours here to the same extent. There are many small tweaks nevertheless in how original formulas translate to a gradual detection progress, as well as some balancing tweaks that fix some glaring oversights of the original game (see Features section if you want to know more). Overall this mod is aimed at providing a more fun stealth gameplay experience while respecting the original mechanics and systems.
 
+<!-- nexus-skip-start -->
 Click on a preview below to watch a release trailer.
+<!-- nexus-skip-end -->
+
 [![Release Trailer](https://img.youtube.com/vi/e-O7qEIHpNw/0.jpg)](https://www.youtube.com/watch?v=e-O7qEIHpNw)
+
+If you are looking for something as good but for MWSE try [Stealth Overhaul 2](http://www.nexusmods.com/morrowind/mods/57321)
 
 ## ☯︎ Features
 
 - Gradual visual detection progress instead of instant detection.
 
-- Awareness grows with level. In vanilla almost every creature has the same sneak skill from a rat to a Golden Saint, and most NPCs keep 5-8 for life, so sneaking past high level enemies was as easy as sneaking past mudcrabs. Now higher level creatures and NPCs are more alert (adjustable in the settings), while those that were sharp-eyed in vanilla stay that way.
+- Leaning around corners.
+
+- A medium-sized rebalance of creatures and NPC awareness. It now grows with NPC level. In vanilla almost every creature has the same sneak skill from a rat to a Golden Saint, often sneaking past some high-level creatures was as easy as sneaking past mudcrabs. Now higher level creatures and NPCs are more alert (adjustable in the settings). This balancing touch never _reduces_ alertness of those that were very keen in the original already.
 
 - Weapon skill is boosted by 50% while in sneak stance.
 
 - Slight increase of sneak speed (it's 90% of the walk speed now). Due to how sneak animations and footstep sounds work it *might* feel like sneaking is faster than walking now - it is not, footstep sounds are just more frequent in sneaking stance.
+
+- Multiple visual options, such as markers floating above NPC heads and/or an animated sneak eye indicator. (see the screenshots)
 
 - Contrary to vanilla boots don't affect your sneak chances. All in all your equipment has no effect on your sneak.
 
@@ -25,9 +34,11 @@ Click on a preview below to watch a release trailer.
 
 ## ☯︎ Recommendations
 
-Try [Dynamic Reticle](https://www.nexusmods.com/morrowind/mods/56584) they go well together, as it adds some subtle sneak visual effects.
+Try [Dynamic Reticle](https://www.nexusmods.com/morrowind/mods/56584) they go well together, as it adds some subtle sneak visual effects. Default settings of this mod assume that Dynamic Reticle is installed, but it will not look wrong without in anyway.
 
-There are also few sneak-related mods out there such as [Burglary Overhaul](https://www.nexusmods.com/morrowind/mods/56965) and [SHOP](https://www.nexusmods.com/morrowind/mods/57747), both mod authors were very helpful and Sneak! will eventually seamlessly work with both of them (but probably it doesnt right now). I haven't personally tested them together myself, but wanted to put them on your radar!
+[Hide in Bushes](https://www.nexusmods.com/morrowind/mods/58424?tab=description) and [Hide in Darkness](https://www.nexusmods.com/morrowind/mods/59344) both can enhance your sneak experience if you want to make it a bit more nuanced.
+
+There are also few stealth-related overhauls out there such as [Burglary Overhaul](https://www.nexusmods.com/morrowind/mods/56965) and [SHOP](https://www.nexusmods.com/morrowind/mods/57747). Sneak! should already seamlessly work with them.
 
 ## ☯︎ How to install
 
@@ -82,7 +93,9 @@ Thanks to [Blurpandra](https://www.nexusmods.com/profile/blurpandra/mods?gameId=
 
 Check their mods, especially the [footstep sound mod](https://gitlab.com/fallchildren/openmw-footsteps), choirbug made a whole bunch of very immersive amazing sounds for it (to hear them you will need to change the sound backend in the mod's settings).
 
-Thanks to [Storm Atronach](https://next.nexusmods.com/profile/StormAtronach0) for the animated eye of the stealth reticle, it's the crosshair from their [Stealth Overhaul 2](https://www.nexusmods.com/morrowind/mods/57321), used with permission.
+Thanks to [Storm Atronach](https://next.nexusmods.com/profile/StormAtronach0) for the animated eye detection indicator, it's the crosshair from their [Stealth Overhaul 2](https://www.nexusmods.com/morrowind/mods/57321), used with permission.
+
+Thanks to [ownlyme](https://next.nexusmods.com/profile/ownlyme) for the sliders, selects and key bindings in the settings, from their [Super Settings Renderers](https://www.nexusmods.com/morrowind/mods/59673).
 
 And also to the entirety of the OpenMW community, my inspiration almost always comes from interacting with OpenMW discord, sometimes we have some differences admittedly, but hey, who doesn't? Love you all :3
 

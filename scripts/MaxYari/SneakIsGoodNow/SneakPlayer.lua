@@ -1,5 +1,5 @@
 -- Mod version, published to Nexus by .github/workflows/nexus-release.yml (the first `version = ...` in this file)
-local VERSION = "1.1"
+local VERSION = "2.0"
 
 local mp = "scripts/MaxYari/SneakIsGoodNow/"
 DebugLevel = 0
@@ -17,11 +17,13 @@ local itemutil = require(mp .. "utils/item_utils")
 local detection = require(mp .. "detection_math")
 local aggression = require(mp .. "aggression_math")
 local DetectionMarker = require(mp .. "Sneak_ui_elements")
-local reticle = require(mp .. "stealth_reticle")
+local eye = require(mp .. "animated_eye")
 local lean = require(mp .. "lean")
+local tutorial = require(mp .. "tutorial")
 local settings = require(mp .. 'settings').settings
 local skillSettings = require(mp .. 'settings').skillSettings
 local uiSettings = require(mp .. 'settings').uiSettings
+local eyeSettings = require(mp .. 'settings').eyeSettings
 local selfActor = gutils.Actor:new(omwself)
 
 -- Max Yari's Script Services (MSS) is a required dependency: checked once, when this script loads.
@@ -39,8 +41,12 @@ local knockoutCheckPeriod = 0.25
 
 -- Detection meter
 local minDetectDur = 0.6            -- average seconds to be seen at a 0% chance to stay hidden
-local maxDetectDur = 15             -- average seconds to be seen at speedLimitChance (the median lands near 9 s)
+local maxDetectDur = 15             -- average seconds to be seen at speedLimitChance, before topStretch
+local detectDurCurve = 1.75         -- how the average grows between the two
 local speedLimitChance = 90         -- above this chance to stay hidden the fill speeds stop changing
+local topStretchFrom = 78           -- from this chance up to speedLimitChance the time to be seen is stretched, up to
+local topStretch = 0.5              -- this much longer, see getFillSpeeds
+-- Medians to be seen: 0% 0.8 s, 20% 1.7 s, 40% 4 s, 60% 7 s, 80% 9.7 s, 90% 11.5 s, 95% 44 s
 local fillJitter = 1.0              -- how far one roll pushes the fill speed above or below the average
 local successRollsBeforeDrain = 3   -- passed rolls in a row before the meter starts draining
 local inSightDrainRate = 0.10       -- per second, while in sight after successRollsBeforeDrain passed rolls
@@ -113,10 +119,15 @@ end
 -- and each roll only pushes the speed above (failed) or below (passed) that average. Passed rolls
 -- in a row drain the meter instead, and that drain is already counted into the average.
 -- Above speedLimitChance the speeds stop changing: drain streaks take over and the time to be seen
--- climbs on its own (about 29 s at 95%, never at 100% where no roll can fail).
+-- climbs on its own (never at 100% where no roll can fail).
+-- Toward speedLimitChance the meter spends more and more time drained down to empty, where draining
+-- does nothing, so it fills faster than the average says: unchecked, the time to be seen would drop
+-- from about 80% to 90%. Stretching detectDur over that range keeps it rising.
 local function getFillSpeeds(sneakChance)
     local p = math.min(sneakChance or 0, speedLimitChance) / 100
-    local detectDur = minDetectDur + (maxDetectDur - minDetectDur) * (p * 100 / speedLimitChance) ^ 2.5
+    local detectDur = minDetectDur + (maxDetectDur - minDetectDur) * (p * 100 / speedLimitChance) ^ detectDurCurve
+    local nearTop = math.max(0, (p * 100 - topStretchFrom) / (speedLimitChance - topStretchFrom))
+    detectDur = detectDur * (1 + topStretch * nearTop ^ 3)
     -- Share of rolls that fail, pass, or pass as part of a draining streak
     local drainShare = p ^ successRollsBeforeDrain
     local failShare, passShare = 1 - p, p - drainShare
@@ -233,7 +244,7 @@ local function detectionLogicTick(dt)
     ps.detectedByNonAggro = false
     ps.hostileInSight = false
     local now = core.getSimulationTime()
-    -- The most alert observer, shown by the stealth reticle
+    -- The most alert observer, shown by the animated eye
     local topProgress, topAggressive = 0, true
     for actorId, ast in pairs(observerActorStatuses) do
         -- LOS check for all observer actors (regardless of detection range)
@@ -364,7 +375,7 @@ local function detectionLogicTick(dt)
         ::continue::
     end
 
-    reticle.update(dt, ps.isSneaking and uiSettings.ShowAnimatedReticle, topProgress, topAggressive)
+    eye.update(dt, ps.isSneaking and eyeSettings.ShowEye, topProgress, topAggressive)
 end
 
 
@@ -378,6 +389,7 @@ local function onUpdate(dt)
     -- Fetching locomotion statuses
     ps.isMoving = selfActor:getCurrentSpeed() > 0 or not selfActor:isOnGround()
     ps.isSneaking = omwself.controls.sneak
+    tutorial.update(dt, ps.isSneaking)
 
     -- Invisibility and chameleon through MSS, re-read at most every effectsCheckPeriod (effects change
     -- infrequently)
@@ -481,14 +493,21 @@ local function onReportAttack(e)
     end
 end
 
+local function onFrame(dt)
+    lean.onFrame(dt)
+    eye.onFrame()
+end
+
 local function onSave()
     return {
         modifiedSkill = modifiedSkill,
-        skillMod = skillMod
+        skillMod = skillMod,
+        tutorialShown = tutorial.isShown()
     }
 end
 
 local function onLoad(data)
+    tutorial.setShown(data and data.tutorialShown)
     if data.modifiedSkill then
         modifiedSkill = data.modifiedSkill
         skillMod = data.skillMod
@@ -497,13 +516,14 @@ end
 
 return {    
     engineHandlers = {
-        onFrame = lean.onFrame,
+        onFrame = onFrame,
         onUpdate = onUpdate,
         onSave = onSave,
         onLoad = onLoad
     },
     eventHandlers = { 
         OMWMusicCombatTargetsChanged = onCombatTargetsChanged,
+        UiModeChanged = tutorial.onUiModeChanged,
         MaxYariUtil_FollowTargets = onGetFollowTargets,
         [DEFS.e.ReportAttack] = onReportAttack
     },

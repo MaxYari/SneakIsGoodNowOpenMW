@@ -8,6 +8,10 @@
   commit sha; default: the current branch). Pinning to a tag/sha keeps the Nexus page intact
   even if files are later moved or deleted on the branch.
 - <details><summary>Title</summary> ... </details> becomes a bold title and a [spoiler].
+- A link to a YouTube video around an image (the thumbnail), as markdown [![Demo](thumbnail)](youtube url) or
+  html <a href="youtube url"><img ...></a>, becomes Nexus' embedded player, [youtube]ID[/youtube]. The "click to
+  watch" line GitHub needs goes in nexus-skip markers (below), since Nexus plays the video in place.
+- <font color="..." size="..."> becomes [color]/[size]. GitHub shows the text in it plain.
 - Nexus BBCode has no image widths, so if <dir>/nexus/<name> exists for a referenced image,
   that pre-scaled variant is used instead (e.g. imgs/nexus/banner_right.png).
 - Anything between <!-- nexus-skip-start --> and <!-- nexus-skip-end --> is left out.
@@ -41,6 +45,7 @@ HTML_BLOCK_RE = re.compile(r"^</?[a-zA-Z][a-zA-Z0-9]*[\s/>]")
 DETAILS_RE = re.compile(r"^<details[^>]*>\s*(?:<summary>(.*?)</summary>)?\s*$", re.I)
 SUMMARY_RE = re.compile(r"^<summary>(.*?)</summary>$", re.I)
 LINK_TARGET = r"\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)"
+YOUTUBE_RE = re.compile(r"(?:youtube\.com/(?:watch\?(?:[^#\s]*&)?v=|embed/|shorts/)|youtu\.be/)([\w-]{11})")
 
 VOID_TAGS = {"img", "br", "hr", "input", "meta", "link", "source", "wbr"}
 
@@ -125,6 +130,12 @@ class Converter:
         text = re.sub(r"\\([\\`*_{}\[\]()#+\-.!|~<>])", lambda m: stash(m.group(1)), text)
         text = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
         text = re.sub(r"<(https?://[^>\s]+)>", lambda m: stash(f"[url]{m.group(1)}[/url]"), text)
+
+        def video(m):
+            vid = YOUTUBE_RE.search(m.group(2))
+            return stash(f"[youtube]{vid.group(1)}[/youtube]") if vid else m.group(0)
+
+        text = re.sub(r"\[!\[[^\]]*\]" + LINK_TARGET + r"\]" + LINK_TARGET, video, text)
         text = re.sub(r"!\[[^\]]*\]" + LINK_TARGET, lambda m: stash(self.img(m.group(1))), text)
         text = re.sub(r"\[([^\]]+)\]" + LINK_TARGET, link, text)
         text = re.sub(r"(\*\*|__)(?=\S)(.+?)(?<=\S)\1", r"[b]\2[/b]", text)
@@ -344,16 +355,22 @@ class _HtmlToBBCode(HTMLParser):
         self.conv = conv
         self.out = []
         self.stack = []  # (tag, closing bbcode)
+        self.videos = []  # open links to YouTube videos: [where their output starts, video id, holds an image]
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
         close = ""
         if tag == "a" and a.get("href"):
+            vid = YOUTUBE_RE.search(a["href"])
+            if vid:
+                self.videos.append([len(self.out), vid.group(1), False])
             url = self.conv.resolve(a["href"], image=False)
             if url:
                 self.out.append(f"[url={url}]")
                 close = "[/url]"
         elif tag == "img" and a.get("src"):
+            if self.videos:
+                self.videos[-1][2] = True
             self.out.append(self.conv.img(a["src"]))
         elif tag == "br":
             self.out.append("\n")
@@ -365,6 +382,11 @@ class _HtmlToBBCode(HTMLParser):
         elif tag == "code":
             self.out.append("[font=Courier New]")
             close = "[/font]"
+        elif tag == "font":
+            for attr in ("color", "size"):
+                if a.get(attr):
+                    self.out.append(f"[{attr}={a[attr]}]")
+                    close = f"[/{attr}]" + close
         elif re.fullmatch(r"h[1-6]", tag):
             open_, close = heading(int(tag[1]), "\x01").split("\x01")
             self.out.append(open_)
@@ -380,6 +402,17 @@ class _HtmlToBBCode(HTMLParser):
             self.handle_endtag(tag)
 
     def handle_endtag(self, tag):
+        if tag == "a" and self.videos:
+            # A thumbnail linked to a video: the whole link becomes the embedded player. A text link stays a link.
+            start, vid, has_image = self.videos.pop()
+            if has_image:
+                del self.out[start:]
+                for idx in range(len(self.stack) - 1, -1, -1):
+                    if self.stack[idx][0] == "a":
+                        del self.stack[idx:]
+                        break
+                self.out.append(f"[youtube]{vid}[/youtube]")
+                return
         for idx in range(len(self.stack) - 1, -1, -1):
             if self.stack[idx][0] == tag:
                 self.out.extend(close for _, close in reversed(self.stack[idx:]))

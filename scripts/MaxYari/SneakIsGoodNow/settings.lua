@@ -1,49 +1,35 @@
 local mp = "scripts/MaxYari/SneakIsGoodNow/"
 
 local I = require('openmw.interfaces')
+local core = require('openmw.core')
 local input = require('openmw.input')
-local storage = require('openmw.storage')
 
 local SettingsHelper = require(mp .. "utils/settings_helper")
 local DEFS = require(mp .. 'utils/sneak_defs')
 local LEAN = DEFS.lean
+local EYE_PRESET = DEFS.eyePreset
 
--- Keyboard friendly lean keys are input actions, so they can be rebound with the built-in key binding settings
-local leanActions = {
-    { key = LEAN.leftAction, name = "Lean left", description = "Keyboard friendly mode only. Hold to lean left." },
-    { key = LEAN.rightAction, name = "Lean right", description = "Keyboard friendly mode only. Hold to lean right." },
-}
-for _, action in ipairs(leanActions) do
-    input.registerAction {
-        key = action.key,
-        type = input.ACTION_TYPE.Boolean,
-        l10n = 'SneakIsGoodNow',
-        name = action.name,
-        description = action.description,
-        defaultValue = false,
-    }
+local hasDynamicReticle = core.contentFiles.has("DynamicReticle.omwscripts")
+
+-- The eye's default preset: Reticle + Dynamic Reticle with Dynamic Reticle installed, Reticle without it
+local EYE_DEFAULT_PRESET = hasDynamicReticle and EYE_PRESET.reticleDr or EYE_PRESET.reticle
+local EYE_DEFAULTS = DEFS.eyePresetValues[EYE_DEFAULT_PRESET]
+
+-- Some settings use ownlyme's Super Settings Renderers (https://www.nexusmods.com/morrowind/mods/59673), bundled in
+-- SuperSettingsRenderers/ as menu scripts: SuperSlider6 for opacities and on-screen positions, SuperSelect3 for
+-- picking from a list and SuperKeybind2 for the lean keys. Numbers that want precision (multipliers, sizes, times)
+-- stay plain number fields, without an upper bound.
+
+-- A SuperSlider6 argument. Every setting needs a table of its own, and the default again for the default mark.
+local function slider(min, max, step, default, extra)
+    local argument = { min = min, max = max, step = step, default = default, showDefaultMark = true, width = 150, thickness = 14 }
+    for key, value in pairs(extra or {}) do argument[key] = value end
+    return argument
 end
 
--- Default keys, set once: a binding the player cleared is kept cleared (it's stored without a key)
-local bindingSection = storage.playerSection('OMWInputBindings')
-local function setDefaultBinding(id, actionKey, keyCode)
-    if bindingSection:get(id) == nil then
-        bindingSection:set(id, { device = 'keyboard', button = keyCode, type = 'action', key = actionKey })
-    end
-end
-setDefaultBinding(LEAN.leftBinding, LEAN.leftAction, input.KEY.Z)
-setDefaultBinding(LEAN.rightBinding, LEAN.rightAction, input.KEY.C)
-
-
--- Settings that moved to another group keep the value the player had set in the old one
-local function moveSetting(key, fromGroup, toGroup)
-    local from, to = storage.playerSection(fromGroup), storage.playerSection(toGroup)
-    if to:get(key) == nil and from:get(key) ~= nil then
-        to:set(key, from:get(key))
-    end
-end
-moveSetting("WeaponBonus", 'SettingsSneakIsGoodNow', 'SettingsSneakIsGoodNowSkills')
-moveSetting("MarkersAlpha", 'SettingsSneakIsGoodNow', 'SettingsSneakIsGoodNowUI')
+-- Inline MyGUI color tags: the text after one is drawn in that color
+local GREEN = "#7FC97F"
+local YELLOW = "#E8C547"
 
 
 I.Settings.registerPage {
@@ -65,10 +51,7 @@ I.Settings.registerGroup {
             key = "DifficultyMultiplier",
             renderer = "number",
             default = 1.0,
-            argument = {
-                min = 0.1,
-                max = 5.0
-            },
+            argument = { min = 0.1 },
             name = "Difficulty multiplier",
             description = "Multiplies enemy attentiveness. Higher values make enemies more attentive."
         },
@@ -77,9 +60,7 @@ I.Settings.registerGroup {
             renderer = "checkbox",
             default = true,
             name = "Scale minimum awareness value with NPC/Creature level",
-            description = "Most creatures have the same sneak skill from a rat to a Golden Saint, and NPCs without Sneak in " ..
-                "their class keep 5-8 for life. When on, higher level creatures and NPCs notice you better. Those with " ..
-                "a higher sneak of their own keep it."
+            description = "In the original game most creatures have a very low attentiveness stat (very easy to sneak by). This setting ensures that higher level creatures and NPCs will become more attentive. It never reduces the attentiveness of NPCs that were already highly attentive in the original."
         },
         {
             key = "KnockoutLosesTrack",
@@ -104,10 +85,7 @@ I.Settings.registerGroup {
             key = "WeaponBonus",
             renderer = "number",
             default = 0.5,
-            argument = {
-                min = 0,
-                max = 1
-            },
+            argument = { min = 0 },
             name = "Weapon skill bonus while sneaking",
             description = "A percentile value (0.5 = 50%) that determines the bonus to weapon skill while sneaking."
         },
@@ -115,13 +93,9 @@ I.Settings.registerGroup {
             key = "SneakSkillGainMult",
             renderer = "number",
             default = 1,
-            argument = {
-                min = 0,
-                max = 10
-            },
+            argument = { min = 0 },
             name = "Sneak skill gain multiplier",
-            description = "Multiplies all sneak skill experience. Sneaking only trains the skill while a hostile NPC " ..
-                "is in sight."
+            description = "Multiplies all sneak skill experience."
         }
     },
 }
@@ -130,22 +104,10 @@ I.Settings.registerGroup {
     key = 'SettingsSneakIsGoodNowUI',
     page = 'SneakIsGoodNowPage',
     l10n = 'SneakIsGoodNow',
-    name = 'Detection indicators',
-    description = "How you see who is noticing you while sneaking. Markers and the reticle can be used together or on their own.",
+    name = 'Floating detection markers',
     permanentStorage = true,
     order = 2,
     settings = {
-        {
-            key = "MarkersAlpha",
-            renderer = "number",
-            default = 1,
-            argument = {
-                min = 0,
-                max = 1
-            },
-            name = "Marker opacity",
-            description = "Opacity of the floating markers."
-        },
         {
             key = "ShowMarkers",
             renderer = "checkbox",
@@ -155,97 +117,135 @@ I.Settings.registerGroup {
         },
         {
             key = "MarkerStyle",
-            renderer = "select",
+            renderer = "SuperSelect3",
             default = "Crescent",
+            -- In-game shots of each style, drawn 1:1 beside it and in its dropdown
             argument = {
-                l10n = 'SneakIsGoodNow',
-                items = { "Crescent", "Vanilla box" }
+                items = { "Crescent", "Vanilla bar" },
+                width = 240,
+                icon = {
+                    ["Crescent"] = mp .. "textures/marker_style_crescent.png",
+                    ["Vanilla bar"] = mp .. "textures/marker_style_vanilla_bar.png",
+                },
+                iconSize = 91,
             },
             name = "Marker style",
-            description = "Crescent: a glowing crescent filling up from the bottom. Vanilla box: a box with the game's " ..
-                "menu border, filled by a rectangle growing from its center."
+            description = "Crescent: an original Sneak! detection marker. Vanilla bar: a simplified detection bar"
+        },
+        {
+            key = "MarkersAlpha",
+            renderer = "SuperSlider6",
+            default = 1,
+            argument = slider(0, 1, 0.05, 1),
+            name = "Marker opacity",
+            description = "Opacity of the floating markers."
         },
         {
             key = "MarkerScale",
             renderer = "number",
             default = 1,
-            argument = {
-                min = 0.25,
-                max = 3
-            },
+            argument = { min = 0.25 },
             name = "Marker size",
-            description = "Scales the floating markers of both styles, and the arrows of off-screen ones."
+            description = "Scales the floating markers"
         },
         {
             key = "MarkerPinWidth",
-            renderer = "number",
+            renderer = "SuperSlider6",
             default = 0.75,
-            argument = {
-                min = 0.2,
-                max = 1
-            },
+            argument = slider(0.2, 1, 0.05, 0.75),
             name = "Off-screen marker area width",
             description = "Markers of NPCs outside your view are pinned to the edges of a centered area this wide, " ..
-                "as a fraction of the screen width, with an arrow pointing where to turn. 0.75 is 4:3 on a 16:9 screen."
-        },
+                "as a fraction of the screen width. 0.75 is roughly a 4:3 middle section on a 16:9 screen."
+        }
+    },
+}
+
+I.Settings.registerGroup {
+    key = 'SettingsSneakIsGoodNowEye',
+    page = 'SneakIsGoodNowPage',
+    l10n = 'SneakIsGoodNow',
+    name = 'Animated eye detection indicator',
+    permanentStorage = true,
+    order = 3,
+    settings = {
         {
-            key = "ShowAnimatedReticle",
-            renderer = "checkbox",
-            default = false,
-            name = "Animated stealth reticle",
-            description = "An eye that opens as you're being noticed, showing the most alert NPC around. " ..
+            key = "ShowEye",
+            renderer = "SneakIsGoodNow_eyeToggle",
+            default = true,
+            name = "Animated eye",
+            description = "A pretty animated eye icon that opens as you're being noticed. " ..
                 "From Stealth Overhaul 2 by Storm Atronach."
         },
         {
-            key = "ReticleScale",
-            renderer = "number",
-            default = 0.75,
-            argument = {
-                min = 0.25,
-                max = 2
-            },
-            name = "Reticle size",
-            description = "1 is the eye's original size."
-        },
-        {
-            key = "ReticleAlpha",
-            renderer = "number",
+            key = "EyeAlpha",
+            renderer = "SuperSlider6",
             default = 1,
-            argument = {
-                min = 0,
-                max = 1
-            },
-            name = "Reticle opacity"
+            argument = slider(0, 1, 0.05, 1),
+            name = "Eye opacity"
         },
         {
-            key = "ReticleColored",
+            key = "EyeColored",
             renderer = "checkbox",
             default = false,
-            name = "Color the reticle",
-            description = "Colors the reticle like the markers: yellow, turning red as you're about to be spotted, " ..
-                "gray for NPCs that won't attack. Off keeps its original colors."
+            name = "Color the eye",
+            description = "Colors the eye like the markers: yellow, turning red as you're about to be spotted, " ..
+                "gray for NPCs that won't attack. Off keeps the same color."
         },
         {
-            key = "ReticleX",
-            renderer = "number",
-            default = 0.5,
-            argument = {
-                min = 0,
-                max = 1
-            },
-            name = "Reticle horizontal position",
-            description = "0 is the left edge of the screen, 1 the right edge."
+            key = "EyePreset",
+            renderer = "SuperSelect3",
+            default = EYE_DEFAULT_PRESET,
+            argument = { items = { EYE_PRESET.reticle, EYE_PRESET.reticleDr, EYE_PRESET.widget, EYE_PRESET.custom }, width = 250 },
+            name = "Animated eye indicator preset",
+            description = "Reticle: a medium eye in place of the crosshair.\n" ..
+                "Reticle + Dynamic Reticle: the same, but Dynamic Reticle's crosshair shows until someone starts noticing you.\n" ..
+                "Widget above health bars: a big eye over the vanilla health bars, shown once someone starts noticing you.\n" ..
+                "Changing any setting below switches to Custom."
         },
         {
-            key = "ReticleY",
+            key = "EyeOnlyWhenNoticed",
+            renderer = "checkbox",
+            default = EYE_DEFAULTS.EyeOnlyWhenNoticed,
+            name = "Hide when unnoticed",
+            description = "Fades the eye out while detection is below 10%."
+        },
+        {
+            key = "EyeHidesDynamicReticle",
+            renderer = "checkbox",
+            default = EYE_DEFAULTS.EyeHidesDynamicReticle,
+            name = "Hide Dynamic Reticle's crosshair while the eye is out",
+            description = "Fades out Dynamic Reticle's crosshair and its sneak arrows while the eye is shown. Works only " ..
+                "with the 'Dynamic Reticle' mod installed.\n" ..
+                (hasDynamicReticle and GREEN .. "Dynamic Reticle is installed."
+                    or YELLOW .. "Dynamic Reticle isn't installed, so this does nothing.")
+        },
+        {
+            key = "EyeSize",
+            renderer = "SuperSelect3",
+            default = EYE_DEFAULTS.EyeSize,
+            argument = { items = { "Big", "Medium", "Small" }, width = 140 },
+            name = "Eye size"
+        },
+        {
+            key = "EyeSizeMult",
             renderer = "number",
+            default = EYE_DEFAULTS.EyeSizeMult,
+            argument = { min = 0.1 },
+            name = "Eye size multiplier"
+        },
+        {
+            key = "EyeX",
+            renderer = "SuperSlider6",
             default = 0.5,
-            argument = {
-                min = 0,
-                max = 1
-            },
-            name = "Reticle vertical position",
-            description = "0 is the top edge of the screen, 1 the bottom edge."
+            argument = slider(0, 1, 0.01, 0.5, { minLabel = "Left", maxLabel = "Right" }),
+            name = "Eye horizontal position"
+        },
+        {
+            key = "EyeY",
+            renderer = "SuperSlider6",
+            default = 0.5,
+            argument = slider(0, 1, 0.01, 0.5, { minLabel = "Top", maxLabel = "Bottom" }),
+            name = "Eye vertical position"
         }
     },
 }
@@ -257,61 +257,47 @@ I.Settings.registerGroup {
     name = 'Leaning',
     description = "Lean around corners. Only your view moves, your body stays where it is, so leaning never makes you easier to spot.",
     permanentStorage = true,
-    order = 4,
+    order = 5,
     settings = {
         {
             key = "LeanInputMode",
-            renderer = "select",
+            renderer = "SuperSelect3",
             default = LEAN.controllerMode,
-            argument = {
-                l10n = 'SneakIsGoodNow',
-                items = { LEAN.controllerMode, LEAN.keyboardMode }
-            },
+            argument = { items = { LEAN.controllerMode, LEAN.keyboardMode }, width = 200 },
             name = "Lean controls",
             description = "Controller friendly: only while sneaking, hold the lean button chosen below and push left or right " ..
                 "(the stick, or your strafe keys) to lean. You don't strafe while the lean button is held. " ..
-                "Keyboard friendly: hold the lean keys below, at any time."
+                "Keyboard friendly: assign and use dedicated lean keys."
         },
         {
             key = "LeanControllerButton",
-            renderer = "select",
+            renderer = "SuperSelect3",
             default = "Run",
-            argument = {
-                l10n = 'SneakIsGoodNow',
-                items = { "Run", "Jump" }
-            },
+            argument = { items = { "Run", "Jump" }, width = 120 },
             name = "Lean button",
-            description = "Controller friendly mode only. Run is your run button or walk/run toggle: running does nothing " ..
-                "while sneaking, and a toggle pressed to lean doesn't switch your walk/run mode. Jump can't jump while sneaking."
+            description = "Controller friendly mode only. Run is your run button or walk/run toggle. Jump is your jump button, duh."
         },
         {
-            key = "LeanLeftKey",
-            renderer = "inputBinding",
-            default = LEAN.leftBinding,
+            key = "LeanKeyLeft",
+            renderer = "SuperKeybind2",
+            default = input.KEY.Z,
+            argument = { default = input.KEY.Z, allowClear = false },
             name = "Lean left",
-            argument = {
-                type = "action",
-                key = LEAN.leftAction
-            }
+            description = "Keyboard friendly mode only. Hold to lean left."
         },
         {
-            key = "LeanRightKey",
-            renderer = "inputBinding",
-            default = LEAN.rightBinding,
+            key = "LeanKeyRight",
+            renderer = "SuperKeybind2",
+            default = input.KEY.C,
+            argument = { default = input.KEY.C, allowClear = false },
             name = "Lean right",
-            argument = {
-                type = "action",
-                key = LEAN.rightAction
-            }
+            description = "Keyboard friendly mode only. Hold to lean right."
         },
         {
             key = "LeanAmount",
             renderer = "number",
             default = 25,
-            argument = {
-                min = 0,
-                max = 100
-            },
+            argument = { min = 0 },
             name = "Lean amount",
             description = "How far your view leans out, in game units (about 1.4 cm each). The tilt grows with it."
         }
@@ -322,6 +308,7 @@ return {
     settings = SettingsHelper:new('SettingsSneakIsGoodNow'),
     skillSettings = SettingsHelper:new('SettingsSneakIsGoodNowSkills'),
     uiSettings = SettingsHelper:new('SettingsSneakIsGoodNowUI'),
+    eyeSettings = SettingsHelper:new('SettingsSneakIsGoodNowEye'),
     leanSettings = SettingsHelper:new('SettingsSneakIsGoodNowLean')
 }
 

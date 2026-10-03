@@ -48,6 +48,15 @@ local function canLean()
         or not types.Player.getControlSwitch(omwself, types.Player.CONTROL_SWITCH.Controls))
 end
 
+-- A lean key as the settings store it (SuperKeybind2): a keyboard key's code, a mouse button's negated, or 1000
+-- plus a controller button's
+local function isBoundPressed(code)
+    if type(code) ~= 'number' then return false end
+    if code >= 1000 then return input.isControllerButtonPressed(code - 1000) end
+    if code < 0 then return input.isMouseButtonPressed(-code) end
+    return input.isKeyPressed(code)
+end
+
 local function leanButtonHeld()
     if leanSettings.LeanControllerButton == "Jump" then
         return input.isActionPressed(input.ACTION.Jump)
@@ -64,8 +73,8 @@ local function onFrame()
     local alwaysRun = omwControls:get('alwaysRun')
     if leanSettings.LeanInputMode == LEAN.keyboardMode then
         if canLean() then
-            if input.getBooleanActionValue(LEAN.leftAction) then target = target - 1 end
-            if input.getBooleanActionValue(LEAN.rightAction) then target = target + 1 end
+            if isBoundPressed(leanSettings.LeanKeyLeft) then target = target - 1 end
+            if isBoundPressed(leanSettings.LeanKeyRight) then target = target + 1 end
         end
     elseif omwself.controls.sneak and canLean() and leanButtonHeld() then
         local side = input.getRangeActionValue('MoveRight') - input.getRangeActionValue('MoveLeft')
